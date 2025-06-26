@@ -33,6 +33,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/modules/expedition/modules_expedition.php'
 require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/product.lib.php';
+require_once DOL_DOCUMENT_ROOT.'/mrp/class/mo.class.php'; // Added for MO and BOM components
 
 
 /**
@@ -115,38 +116,68 @@ class pdf_rouget extends ModelePdfExpedition
 
 		// Define position of columns
 		$this->posxdesc = $this->marge_gauche + 1;
-		$this->posxweightvol = $this->page_largeur - $this->marge_droite - 82;
-		$this->posxqtyordered = $this->page_largeur - $this->marge_droite - 60;
-		$this->posxqtytoship = $this->page_largeur - $this->marge_droite - 28;
-		$this->posxpuht = $this->page_largeur - $this->marge_droite;
 
-		if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {	// Show also the prices
-			$this->posxweightvol = $this->page_largeur - $this->marge_droite - 118;
-			$this->posxqtyordered = $this->page_largeur - $this->marge_droite - 96;
-			$this->posxqtytoship = $this->page_largeur - $this->marge_droite - 68;
+		// New width for serial number column
+		$this->serialcolwidth = 30; // Width for the serial number column
+
+		if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) { // Show also the prices
 			$this->posxpuht = $this->page_largeur - $this->marge_droite - 40;
 			$this->posxtotalht = $this->page_largeur - $this->marge_droite - 20;
+
+			$this->posxqtytoship = $this->posxpuht - 28; // QtyToShip ends where PriceUHT starts, width 28
+			$this->posxqtyordered = $this->posxqtytoship - 28; // QtyOrdered ends where QtyToShip starts, width 28
+			$this->posxserial = $this->posxqtyordered - $this->serialcolwidth;
+			$this->posxweightvol = $this->posxserial - 36; // Weight/Vol width 36
+
+		} else { // Prices are not shown
+			$this->posxqtytoship = $this->page_largeur - $this->marge_droite - 28; // QtyToShip is the rightmost data column
+			$this->posxqtyordered = $this->posxqtytoship - 32;
+			$this->posxserial = $this->posxqtyordered - $this->serialcolwidth;
+			$this->posxweightvol = $this->posxserial - 22;
 		}
+
+		// This variable will determine the right boundary for the description column
+		$this->posxpicture_reference_for_desc_width = $this->posxweightvol;
 
 		if (getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) {
-			$this->posxweightvol = $this->posxqtyordered;
+			$this->posxpicture_reference_for_desc_width = $this->posxserial;
 		}
 
-		$this->posxpicture = $this->posxweightvol - getDolGlobalInt('MAIN_DOCUMENTS_WITH_PICTURE_WIDTH', 20); // width of images
+		$this->posxpicture = $this->posxpicture_reference_for_desc_width - getDolGlobalInt('MAIN_DOCUMENTS_WITH_PICTURE_WIDTH', 20); // width of images
 
 		// To work with US executive format
 		if ($this->page_largeur < 210) {
-			$this->posxweightvol -= 20;
-			$this->posxpicture -= 20;
+			$this->posxpicture_reference_for_desc_width -= 20; // Shift reference point first
+			$this->posxweightvol -= 20; // This might be redundant if already based on shifted ref, but keep for safety
+			$this->posxpicture = $this->posxpicture_reference_for_desc_width - getDolGlobalInt('MAIN_DOCUMENTS_WITH_PICTURE_WIDTH', 20); // Recalc picture pos
+			$this->posxserial -=20;
 			$this->posxqtyordered -= 20;
 			$this->posxqtytoship -= 20;
+			if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
+				$this->posxpuht -= 20;
+				$this->posxtotalht -= 20;
+			}
 		}
 
 		if (getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
-			$this->posxweightvol += ($this->posxqtytoship - $this->posxqtyordered);
-			$this->posxpicture += ($this->posxqtytoship - $this->posxqtyordered);
-			$this->posxqtyordered = $this->posxqtytoship;
+			// QtyOrdered column is hidden, QtyToShip data effectively uses its space for calculation anchor.
+			// The actual data for "ordered" is not shown.
+			$this->posxqtyordered = $this->posxqtytoship; // This makes QtyOrdered start where QtyToShip starts, effectively hiding it or merging.
+
+			// Re-anchor serial to the new effective start of QtyOrdered (which is now QtyToShip's start)
+			$this->posxserial = $this->posxqtyordered - $this->serialcolwidth;
+
+			if (getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) {
+				$this->posxpicture_reference_for_desc_width = $this->posxserial;
+			} else {
+				// Weight/Vol is to the left of Serial
+				$base_width_wv = getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT') ? 36 : 22;
+				$this->posxweightvol = $this->posxserial - $base_width_wv;
+				$this->posxpicture_reference_for_desc_width = $this->posxweightvol;
+			}
+			$this->posxpicture = $this->posxpicture_reference_for_desc_width - getDolGlobalInt('MAIN_DOCUMENTS_WITH_PICTURE_WIDTH', 20);
 		}
+
 
 		if ($mysoc === null) {
 			dol_syslog(get_class($this).'::__construct() Global $mysoc should not be null.'. getCallerInfoString(), LOG_ERR);
@@ -514,8 +545,17 @@ class pdf_rouget extends ModelePdfExpedition
 					// Description of product line
 					$curX = $this->posxdesc - 1;
 
+					// Determine the text for the dedicated serial/MO column FIRST
+					$lotserial_text_for_column = '';
+					if (isset($current_line_mo_ref) && !empty($current_line_mo_ref) && isset($object->lines[$i]->fk_product) && $object->lines[$i]->fk_product == 483) {
+						$lotserial_text_for_column = $current_line_mo_ref;
+					} else {
+						$lotserial_text_for_column = $this->getLineSerialNumber($object, $i);
+					}
+
 					$pdf->startTransaction();
-					pdf_writelinedesc($pdf, $object, $i, $outputlangs, $this->posxpicture - $curX, 3, $curX, $curY, $hideref, $hidedesc);
+					$moreparamsfordesc = array('remove_batch_info' => 1); // Prevent pdf_writelinedesc from adding its own batch/lot
+					pdf_writelinedesc($pdf, $object, $i, $outputlangs, $this->posxpicture - $curX, 3, $curX, $curY, $hideref, $hidedesc, 0, $moreparamsfordesc);
 
 					$pageposafter = $pdf->getPage();
 					if ($pageposafter > $pageposbefore) {	// There is a pagebreak
@@ -523,7 +563,7 @@ class pdf_rouget extends ModelePdfExpedition
 						$pageposafter = $pageposbefore;
 						//print $pageposafter.'-'.$pageposbefore;exit;
 						$pdf->setPageOrientation('', 1, $heightforfooter); // The only function to edit the bottom margin of current page to set it.
-						pdf_writelinedesc($pdf, $object, $i, $outputlangs, $this->posxpicture - $curX, 3, $curX, $curY, $hideref, $hidedesc);
+						pdf_writelinedesc($pdf, $object, $i, $outputlangs, $this->posxpicture - $curX, 3, $curX, $curY, $hideref, $hidedesc, 0, $moreparamsfordesc);
 
 						$pageposafter = $pdf->getPage();
 						$posyafter = $pdf->GetY();
@@ -575,31 +615,92 @@ class pdf_rouget extends ModelePdfExpedition
 
 					$pdf->SetFont('', '', $default_font_size - 1); // We reposition the default font
 
-					// weight
+					// Initialize $current_line_mo_ref for product 483 logic
+					$current_line_mo_ref = null;
+					$bom_components_to_display = array();
 
-					$pdf->SetXY($this->posxweightvol, $curY);
-					$weighttxt = '';
-					if (empty($object->lines[$i]->fk_product_type) && $object->lines[$i]->weight) {
-						$weighttxt = round($object->lines[$i]->weight * $object->lines[$i]->qty_shipped, getDolGlobalInt('SHIPMENT_ROUND_WEIGHT_ON_PDF', 5)).' '.measuringUnitString(0, "weight", $object->lines[$i]->weight_units, 1);
-					}
-					$voltxt = '';
-					if (empty($object->lines[$i]->fk_product_type) && $object->lines[$i]->volume && !getDolGlobalString('SHIPPING_PDF_HIDE_VOLUME')) {
-						$voltxt = round($object->lines[$i]->volume * $object->lines[$i]->qty_shipped, getDolGlobalInt('SHIPMENT_ROUND_VOLUME_ON_PDF', 5)).' '.measuringUnitString(0, "volume", $object->lines[$i]->volume_units ? $object->lines[$i]->volume_units : 0, 1);
+					if (isset($object->lines[$i]->fk_product) && $object->lines[$i]->fk_product == 483) {
+						$line_description = '';
+						if (!empty($object->lines[$i]->desc)) {
+							$line_description = $object->lines[$i]->desc;
+						} elseif (!empty($object->lines[$i]->label)) {
+							$line_description = $object->lines[$i]->label;
+						} elseif (!empty($object->lines[$i]->libelle)) {
+							$line_description = $object->lines[$i]->libelle;
+						}
+
+						if (preg_match('/([A-Za-z0-9-]+-?\d+)(?: \(Fabrication\))?/i', $line_description, $matches)) {
+							$extracted_mo_ref = $matches[1];
+							$current_line_mo_ref = $extracted_mo_ref; // Used for serial number column
+
+							$mo = new Mo($this->db);
+							$result_mo = $mo->fetch(0, $extracted_mo_ref);
+							if ($result_mo > 0 && !empty($mo->fk_bom) && $mo->fk_bom > 0) {
+								$sql_bom_lines = "SELECT p.rowid as fk_product, p.ref, p.label, bbl.qty";
+								$sql_bom_lines .= " FROM ".MAIN_DB_PREFIX."bom_bomline as bbl";
+								$sql_bom_lines .= " JOIN ".MAIN_DB_PREFIX."product as p ON bbl.fk_product = p.rowid";
+								$sql_bom_lines .= " WHERE bbl.fk_bom = " . (int)$mo->fk_bom;
+								$sql_bom_lines .= " ORDER BY bbl.position ASC";
+
+								$resql_bom = $this->db->query($sql_bom_lines);
+								if ($resql_bom) {
+									while ($obj_bom_line = $this->db->fetch_object($resql_bom)) {
+										$bom_components_to_display[] = $obj_bom_line;
+									}
+									$this->db->free($resql_bom);
+								} else {
+									dol_syslog("PDF Rouget: DB error fetching BOM lines for BOM ID: " . $mo->fk_bom . " - " . $this->db->lasterror(), LOG_ERR);
+								}
+							} elseif ($result_mo <= 0) {
+								dol_syslog("PDF Rouget: Failed to fetch MO with ref: " . $extracted_mo_ref . ". Error: " . $mo->error, LOG_ERR);
+							} elseif (empty($mo->fk_bom) || $mo->fk_bom <= 0) {
+								dol_syslog("PDF Rouget: MO (ref: ".$extracted_mo_ref.") does not have a valid fk_bom.", LOG_WARNING);
+							}
+						} else {
+							dol_syslog("PDF Rouget: Could not extract MO ref from description: '" . $line_description . "' for product line " . $i, LOG_WARNING);
+						}
 					}
 
+					// weight & volume
 					if (!getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) {
-						$pdf->writeHTMLCell($this->posxqtyordered - $this->posxweightvol + 2, 3, $this->posxweightvol - 1, $curY, $weighttxt.(($weighttxt && $voltxt) ? '<br>' : '').$voltxt, 0, 0, false, true, 'C');
-						//$pdf->MultiCell(($this->posxqtyordered - $this->posxweightvol), 3, $weighttxt.(($weighttxt && $voltxt)?'<br>':'').$voltxt,'','C');
+						$pdf->SetXY($this->posxweightvol, $curY);
+						$weighttxt = '';
+						if (empty($object->lines[$i]->fk_product_type) && $object->lines[$i]->weight) {
+							$weighttxt = round($object->lines[$i]->weight * $object->lines[$i]->qty_shipped, getDolGlobalInt('SHIPMENT_ROUND_WEIGHT_ON_PDF', 5)).' '.measuringUnitString(0, "weight", $object->lines[$i]->weight_units, 1);
+						}
+						$voltxt = '';
+						if (empty($object->lines[$i]->fk_product_type) && $object->lines[$i]->volume && !getDolGlobalString('SHIPPING_PDF_HIDE_VOLUME')) {
+							$voltxt = round($object->lines[$i]->volume * $object->lines[$i]->qty_shipped, getDolGlobalInt('SHIPMENT_ROUND_VOLUME_ON_PDF', 5)).' '.measuringUnitString(0, "volume", $object->lines[$i]->volume_units ? $object->lines[$i]->volume_units : 0, 1);
+						}
+						// Calculate width for weight/vol based on its left (posxweightvol) and serial's left (posxserial)
+						$width_wv = ($this->posxserial -1) - ($this->posxweightvol -1) ;
+						$pdf->writeHTMLCell($width_wv > 0 ? $width_wv : 0, 3, $this->posxweightvol -1, $curY, $weighttxt.(($weighttxt && $voltxt) ? '<br>' : '').$voltxt, 0, 0, false, true, 'C');
 					}
+
+					// Serial Number
+					$serial_text_to_display = '';
+					if (isset($current_line_mo_ref) && !empty($current_line_mo_ref) && isset($object->lines[$i]->fk_product) && $object->lines[$i]->fk_product == 483) {
+						$serial_text_to_display = $current_line_mo_ref;
+					} else {
+						$serial_text_to_display = $this->getLineSerialNumber($object, $i);
+					}
+					$pdf->SetXY($this->posxserial, $curY);
+					$pdf->MultiCell($this->serialcolwidth -1, 3, $outputlangs->convToOutputCharset($serial_text_to_display), '', 'L');
+
 
 					if (!getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
 						$pdf->SetXY($this->posxqtyordered, $curY);
-						$pdf->MultiCell(($this->posxqtytoship - $this->posxqtyordered), 3, $object->lines[$i]->qty_asked, '', 'C');
+						// Calculate width for QtyOrdered based on its left (posxqtyordered) and QtyToShip's left (posxqtytoship)
+						$width_qtyordered = ($this->posxqtytoship -1) - ($this->posxqtyordered -1);
+						$pdf->MultiCell($width_qtyordered > 0 ? $width_qtyordered : 0, 3, $object->lines[$i]->qty_asked, '', 'C');
 					}
 
 					if (!getDolGlobalString('SHIPPING_PDF_HIDE_QTYTOSHIP')) {
 						$pdf->SetXY($this->posxqtytoship, $curY);
-						$pdf->MultiCell(($this->posxpuht - $this->posxqtytoship), 3, $object->lines[$i]->qty_shipped, '', 'C');
+						// Calculate width for QtyToShip
+						$right_boundary_qtytoship = getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT') ? ($this->posxpuht -1) : ($this->page_largeur - $this->marge_droite);
+						$width_qtytoship = $right_boundary_qtytoship - ($this->posxqtytoship-1);
+						$pdf->MultiCell($width_qtytoship > 0 ? $width_qtytoship : 0, 3, $object->lines[$i]->qty_shipped, '', 'C');
 					}
 
 					if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
@@ -610,10 +711,86 @@ class pdf_rouget extends ModelePdfExpedition
 						$pdf->MultiCell(($this->page_largeur - $this->marge_droite - $this->posxtotalht), 3, price($object->lines[$i]->total_ht, 0, $outputlangs), '', 'R');
 					}
 
-					$nexY += 3;
-					if ($weighttxt && $voltxt) {
-						$nexY += 2;
+					// Determine the Y position after all standard columns for the current line $i
+					// This $nexY calculation should be accurate based on the main line's content height.
+					// $posYAfterDescription was the Y after the main description.
+					// Other columns (weight, serial, qty) are printed at $curY and typically don't exceed description height.
+					// If they could (e.g., multi-line serial number), $nexY should be max of all their end Ys.
+					// For simplicity, we assume description height is dominant or other columns are single line.
+					$nexY = max($posYAfterDescription, $curY + 3); // Add base line height if other cells were taller
+					if ($weighttxt && $voltxt && !getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) { // If weight and vol were on two lines
+						$nexY = max($nexY, $curY + 5); // approx height for two lines in W/V
 					}
+
+
+					// Display BOM Components for product ID 483
+					if (isset($object->lines[$i]->fk_product) && $object->lines[$i]->fk_product == 483 && !empty($bom_components_to_display)) {
+						$line_height_bom = 3; // Height for each BOM component line
+						$bom_content_start_y = $nexY + 1; // Start a bit below the main line content
+
+						// Check for page break before starting BOM components list
+						// Estimate height: title + (number of components * line_height) + padding
+						$estimated_bom_total_height = $line_height_bom + (count($bom_components_to_display) * $line_height_bom) + 2;
+						if (($bom_content_start_y + $estimated_bom_total_height) > ($this->page_hauteur - $heightforfooter - 5)) {
+							$pdf->AddPage('', '', true);
+							if (!empty($tplidx)) { $pdf->useTemplate($tplidx); }
+							if (!getDolGlobalInt('MAIN_PDF_DONOTREPEAT_HEAD')) {
+								$this->_pagehead($pdf, $object, 0, $outputlangs);
+							}
+							// Redraw table headers on new page
+							$this->_tableau($pdf, $tab_top_newpage, $this->page_hauteur - $tab_top_newpage - $heightforfooter, 0, $outputlangs, 0, 1);
+							$bom_content_start_y = $tab_top_newpage + 5; // Start after table headers
+							$nexY = $bom_content_start_y; // Reset nexY for the new page context
+						}
+
+						// BOM Title
+						$pdf->SetFont('', 'B', $default_font_size - 2);
+						// Position title slightly indented under description area
+						$bom_title_x = $this->posxdesc + 2; // Adjusted Indent from description start
+						$bom_title_width = ($this->posxpicture_reference_for_desc_width - $bom_title_x) - 2; // Max width for title
+						if (!$this->atleastonephoto) { // If no photo, description area is wider
+							$bom_title_width = ($this->posxpicture_reference_for_desc_width - $bom_title_x) -2;
+						}
+
+						$pdf->SetXY($bom_title_x, $bom_content_start_y);
+						$pdf->MultiCell($bom_title_width > 0 ? $bom_title_width : 100, $line_height_bom, $outputlangs->transnoentities("BOMComponentsTitle", "Composants OF ".$current_line_mo_ref.":"), 0, 'L');
+						$bom_content_start_y += $line_height_bom + 1; // Space after title
+
+						$pdf->SetFont('', '', $default_font_size - 2);
+						$component_indent_x = $this->posxdesc + 5; // Adjusted Further indent for component lines
+						$component_max_width = ($this->posxpicture_reference_for_desc_width - $component_indent_x) - 2;
+						if (!$this->atleastonephoto) {
+							$component_max_width = ($this->posxpicture_reference_for_desc_width - $component_indent_x) -2;
+						}
+
+						foreach ($bom_components_to_display as $component) {
+							if ($bom_content_start_y + $line_height_bom > ($this->page_hauteur - $heightforfooter - 5)) {
+								$pdf->AddPage('', '', true);
+								if (!empty($tplidx)) { $pdf->useTemplate($tplidx); }
+								if (!getDolGlobalInt('MAIN_PDF_DONOTREPEAT_HEAD')) {
+									$this->_pagehead($pdf, $object, 0, $outputlangs);
+								}
+								$this->_tableau($pdf, $tab_top_newpage, $this->page_hauteur - $tab_top_newpage - $heightforfooter, 0, $outputlangs, 0, 1);
+								$bom_content_start_y = $tab_top_newpage + 5;
+								// Optionally re-print BOM title if it spans pages, or just continue components
+								$pdf->SetFont('', '', $default_font_size - 2); // Ensure font is reset
+							}
+
+							$component_text = "- ".$outputlangs->convToOutputCharset($component->ref . " (" . $component->label . ") : " . $component->qty);
+							$pdf->SetXY($component_indent_x, $bom_content_start_y);
+							$pdf->MultiCell($component_max_width > 0 ? $component_max_width : 80, $line_height_bom, $component_text, 0, 'L');
+							$bom_content_start_y += $line_height_bom;
+						}
+						$nexY = $bom_content_start_y + 1; // Update nexY to position after the BOM components
+					} else {
+                        // This is the original nexY calculation if not product 483 or no BOM
+                        if ($weighttxt && $voltxt && !getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) {
+                             $nexY = max($nexY, $curY + 5); // If W/V had two lines
+                        } else {
+                             $nexY = max($nexY, $curY + 3); // Default line height added
+                        }
+                    }
+
 
 					// Add line
 					if (getDolGlobalString('MAIN_PDF_DASH_BETWEEN_LINES') && $i < ($nblines - 1)) {
