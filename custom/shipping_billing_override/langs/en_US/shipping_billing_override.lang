@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleShipping_billing_overrideName'
+ModuleShipping_billing_overrideName = Shipping_billing_override
+# Module description 'ModuleShipping_billing_overrideDesc'
+ModuleShipping_billing_overrideDesc = Shipping_billing_override description
+
+#
+# Admin page
+#
+Shipping_billing_overrideSetup = Shipping_billing_override setup
+Settings = Settings
+Shipping_billing_overrideSetupPage = Shipping_billing_override setup page
+NewSection=New section
+SHIPPING_BILLING_OVERRIDE_MYPARAM1 = My param 1
+SHIPPING_BILLING_OVERRIDE_MYPARAM1Tooltip = My param 1 tooltip
+SHIPPING_BILLING_OVERRIDE_MYPARAM2=My param 2
+SHIPPING_BILLING_OVERRIDE_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+Shipping_billing_overrideAbout = About Shipping_billing_override
+Shipping_billing_overrideAboutPage = Shipping_billing_override about page
+
+#
+# Sample page
+#
+Shipping_billing_overrideArea = Home Shipping_billing_override
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

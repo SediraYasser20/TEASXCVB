@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleMOFabIntegrationName'
+ModuleMOFabIntegrationName = MOFabIntegration
+# Module description 'ModuleMOFabIntegrationDesc'
+ModuleMOFabIntegrationDesc = MOFabIntegration description
+
+#
+# Admin page
+#
+MOFabIntegrationSetup = MOFabIntegration setup
+Settings = Settings
+MOFabIntegrationSetupPage = MOFabIntegration setup page
+NewSection=New section
+MOFABINTEGRATION_MYPARAM1 = My param 1
+MOFABINTEGRATION_MYPARAM1Tooltip = My param 1 tooltip
+MOFABINTEGRATION_MYPARAM2=My param 2
+MOFABINTEGRATION_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+MOFabIntegrationAbout = About MOFabIntegration
+MOFabIntegrationAboutPage = MOFabIntegration about page
+
+#
+# Sample page
+#
+MOFabIntegrationArea = Home MOFabIntegration
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

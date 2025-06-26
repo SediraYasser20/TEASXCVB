@@ -1,0 +1,140 @@
+-- Database Trigger Solution for Dolibarr MO Integration
+
+-- 1. Trigger to automatically set fk_product = 31 when MO orders are inserted
+DELIMITER $$
+
+CREATE TRIGGER tr_commandedet_mo_insert
+AFTER INSERT ON llx_commandedet
+FOR EACH ROW
+BEGIN
+    -- Check if the description matches MO pattern and fk_product is NULL
+    IF NEW.description REGEXP '^MO[0-9]+-[0-9]+.*Fabrication' AND NEW.fk_product IS NULL THEN
+        UPDATE llx_commandedet 
+        SET fk_product = 31 
+        WHERE rowid = NEW.rowid;
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- 2. Trigger to handle updates (when description is modified)
+DELIMITER $$
+
+CREATE TRIGGER tr_commandedet_mo_update
+AFTER UPDATE ON llx_commandedet
+FOR EACH ROW
+BEGIN
+    -- If description changed to MO pattern and fk_product is NULL, set it to 31
+    IF NEW.description REGEXP '^MO[0-9]+-[0-9]+.*Fabrication' 
+       AND NEW.fk_product IS NULL 
+       AND (OLD.description != NEW.description OR OLD.description IS NULL) THEN
+        UPDATE llx_commandedet 
+        SET fk_product = 31 
+        WHERE rowid = NEW.rowid;
+    END IF;
+    
+    -- If description changed away from MO pattern, reset fk_product to NULL
+    IF OLD.description REGEXP '^MO[0-9]+-[0-9]+.*Fabrication' 
+       AND NOT NEW.description REGEXP '^MO[0-9]+-[0-9]+.*Fabrication'
+       AND NEW.fk_product = 31 THEN
+        UPDATE llx_commandedet 
+        SET fk_product = NULL 
+        WHERE rowid = NEW.rowid;
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- 3. One-time update for existing records
+UPDATE llx_commandedet 
+SET fk_product = 31 
+WHERE description REGEXP '^MO[0-9]+-[0-9]+.*Fabrication' 
+  AND (fk_product IS NULL OR fk_product = 0);
+
+-- 4. View triggers to see what's created
+SHOW TRIGGERS LIKE 'llx_commandedet';
+
+-- 5. To drop triggers if needed (for testing/modification):
+-- DROP TRIGGER IF EXISTS tr_commandedet_mo_insert;
+-- DROP TRIGGER IF EXISTS tr_commandedet_mo_update;
+
+-- 6. Alternative: Single trigger approach using BEFORE INSERT/UPDATE
+-- This prevents the need for recursive updates
+
+DELIMITER $$
+
+CREATE TRIGGER tr_commandedet_mo_before
+BEFORE INSERT ON llx_commandedet
+FOR EACH ROW
+BEGIN
+    -- Set fk_product = 31 if description matches MO pattern
+    IF NEW.description REGEXP '^MO[0-9]+-[0-9]+.*Fabrication' THEN
+        SET NEW.fk_product = 31;
+    END IF;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER tr_commandedet_mo_before_update
+BEFORE UPDATE ON llx_commandedet
+FOR EACH ROW
+BEGIN
+    -- Set fk_product = 31 if description matches MO pattern
+    IF NEW.description REGEXP '^MO[0-9]+-[0-9]+.*Fabrication' THEN
+        SET NEW.fk_product = 31;
+    -- Reset fk_product to NULL if description no longer matches and was 31
+    ELSEIF OLD.description REGEXP '^MO[0-9]+-[0-9]+.*Fabrication' 
+           AND NEW.fk_product = 31 THEN
+        SET NEW.fk_product = NULL;
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- 7. Test the trigger with sample data
+-- INSERT INTO llx_commandedet (fk_commande, description, qty) 
+-- VALUES (193, 'MO2506-0108 (Fabrication)', 1);
+
+-- 8. Query to verify the trigger works
+-- SELECT rowid, fk_commande, fk_product, description 
+-- FROM llx_commandedet 
+-- WHERE description LIKE 'MO%';
+
+-- 9. Advanced trigger with logging (optional)
+DELIMITER $$
+
+CREATE TRIGGER tr_commandedet_mo_with_log
+BEFORE INSERT ON llx_commandedet
+FOR EACH ROW
+BEGIN
+    DECLARE log_message VARCHAR(255);
+    
+    -- Set fk_product = 31 if description matches MO pattern
+    IF NEW.description REGEXP '^MO[0-9]+-[0-9]+.*Fabrication' THEN
+        SET NEW.fk_product = 31;
+        
+        -- Optional: Log the change (requires a log table)
+        -- SET log_message = CONCAT('Auto-set fk_product=31 for MO: ', NEW.description);
+        -- INSERT INTO llx_mo_trigger_log (action, description, timestamp) 
+        -- VALUES ('AUTO_SET_PRODUCT', log_message, NOW());
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- 10. Create log table (optional for debugging)
+CREATE TABLE IF NOT EXISTS llx_mo_trigger_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    action VARCHAR(50),
+    description TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11. Performance considerations
+-- Add index on description for faster regex matching
+CREATE INDEX idx_commandedet_description ON llx_commandedet(description(50));
+
+-- 12. Backup existing data before implementing
+-- CREATE TABLE llx_commandedet_backup AS SELECT * FROM llx_commandedet WHERE description LIKE 'MO%';

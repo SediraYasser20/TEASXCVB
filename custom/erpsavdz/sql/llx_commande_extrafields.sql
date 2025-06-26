@@ -1,0 +1,4 @@
+-- This file is a placeholder.
+-- Dolibarr's extrafields system automatically manages the schema
+-- for llx_commande_extrafields based on definitions in the module descriptor.
+-- This file can be used for other SQL initializations if necessary.

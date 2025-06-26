@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleRECEPTIONSHOWROOMName'
+ModuleRECEPTIONSHOWROOMName = RECEPTIONSHOWROOM
+# Module description 'ModuleRECEPTIONSHOWROOMDesc'
+ModuleRECEPTIONSHOWROOMDesc = RECEPTIONSHOWROOM description
+
+#
+# Admin page
+#
+RECEPTIONSHOWROOMSetup = RECEPTIONSHOWROOM setup
+Settings = Settings
+RECEPTIONSHOWROOMSetupPage = RECEPTIONSHOWROOM setup page
+NewSection=New section
+RECEPTIONSHOWROOM_MYPARAM1 = My param 1
+RECEPTIONSHOWROOM_MYPARAM1Tooltip = My param 1 tooltip
+RECEPTIONSHOWROOM_MYPARAM2=My param 2
+RECEPTIONSHOWROOM_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+RECEPTIONSHOWROOMAbout = About RECEPTIONSHOWROOM
+RECEPTIONSHOWROOMAboutPage = RECEPTIONSHOWROOM about page
+
+#
+# Sample page
+#
+RECEPTIONSHOWROOMArea = Home RECEPTIONSHOWROOM
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

@@ -1,0 +1,118 @@
+# Copyright (C) 2022-2023 EVARISK <technique@evarisk.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#
+# Generic object
+#
+
+# Right
+ReadObjects   = Read %s
+CreateObjects = Create/Modify %s
+DeleteObjects = Delete %s
+
+# Trigger
+ObjectCreateTrigger     = Creation of %s %s
+ObjectModifyTrigger     = Modification of %s %s
+ObjectDeleteTrigger     = Deletion of %s %s
+ObjectUnValidateTrigger = Reopening of %s %s
+ObjectValidateTrigger   = Pending signature of the participants of %s %s
+ObjectLockedTrigger     = Locking %s %s - Ready for document generation
+ObjectSentByMailTrigger = Mail sent
+ObjectArchivedTrigger   = Archiving %s %s
+ObjectExpiredTrigger    = Expiring %s %s
+ObjectGenerateTrigger   = Generating %s %s
+ObjectSignedTrigger     = Signing %s %s
+ObjectImportTrigger     = Import of %s %s
+ObjectUnlinkTrigger     = Unlink of %s %s
+
+# SetEventMessage - Notice info
+ObjectValidated = %s has been validated
+ObjectReOpened  = %s has been re-opened
+
+# SetEventMessage - Notice error
+ErrorCreateObject = Error: creation of a %s
+ErrorDeleteObject = Error: deleting a %s
+
+# Numbering modules
+SaturneGenericMaskCodes = This field consists of a prefix followed by a suffix. For example, ABC{000} will result in ABC001, ABC002, etc. You can add as many zeros as you wish.
+
+# Status
+StatusDraft              = Draft (to be validated)
+Validated                = Validated
+ValidatePendingSignature = Validated (pending signature)
+Locked                   = Locked
+Archived                 = Archived
+Expired                  = Expired
+
+# Button
+ReOpenDoli                       = Reopen
+Sign                             = Sign
+Lock                             = Lock
+Archive                          = Archive
+Clone                            = Clone
+ObjectMustBeDraft                = %s must be in status (draft)
+ObjectMustBeValidated            = %s must be in status (validated)
+ObjectMustBeLocked               = %s must be in status (locked)
+ObjectMustBeValidatedToGenerate  = %s must be in status (validated) to generate the document
+ObjectMustBeLockedToGenerate     = %s must be in status (locked) to generate the document
+ObjectMustBeValidatedToSign      = %s must be in status (validated) for participants to sign
+AllSignatoriesMustHaveSigned     = All participants must have signed to lock %s
+ObjectMustBeValidatedToSendEmail = %s must be in (validated) status to send an email
+ObjectMustBeLockedToSendEmail    = %s must be in (locked) status to send an email
+ObjectMustBeLockedToArchive      = %s must be in status (locked) in order to archive it
+
+# Confirm box
+ValidateObject          = Validate %s
+ConfirmValidateObject   = Are you sure you want to validate %s? <br> Validation allows participants to sign the document but <b> prevents new participants from being added </b><i>(unless the Manage adding participants on status configuration is enabled)</i><b> or %s from being modified. </b>
+ReOpenObject            = Open %s again
+ConfirmReOpenObject     = Are you sure you want to reopen %s ? Reopening allows %s to be modified and new participants to be added but all document signatures will be lost
+LockObject              = Lock %s
+ConfirmLockObject       = Are you sure you want to lock %s?<br>This lock allows you to freeze the data and the document generation.
+CloneObject             = Clone %s
+NewLabelForClone        = New %s label
+ConfirmCloneObject      = Are you sure you want to clone %s <b>%s</b>?
+DeleteObject            = Delete %s
+RemoveFileObject        = Delete the document
+ConfirmRemoveFileObject = Are you sure you want to <b>delete</b> the document %s ?<br><b> This action is irreversible. The document will be deleted forever. </b>
+ArchiveObject           = Archive %s
+ConfirmArchiveObject    = Are you sure you want to archive %s ?
+CloneCategories         = Clone tags/categories ?
+ClonePhotos             = Cloner les photos ?
+
+# Confirm mass box
+ConfirmMassLock              = Bulk lock confirmation
+ConfirmMassLockingQuestion   = Are you sure you want to lock the %d record(s) selected ?
+ConfirmMassArchive           = Bulk archiving confirmation
+ConfirmMassArchivingQuestion = Are you sure you want to archive the %d record(s) selected ?
+
+# SetEventMessage mass action
+RecordsArchived = %d record(s) archived
+ObjectNotFound  = %s not found
+
+# Data
+ActionsOnObject = Events on %s
+DisplayMoreInfo = View more information
+
+# Email - Mail
+ObjectEmailDocumentLabel   = SAT_Document
+ObjectEmailDocumentTopic   = [__[MAIN_INFO_SOCIETY_NAME]__] __TYPE__ __REF__ Summary
+ObjectEmailDocumentContent = Hello,<br /><br />Please find attached the ODT document(s) related to __THETYPE__.<br /><br />Yours sincerely,<br /><br />QHSE Department<br />__USER_FULLNAME__<br />__USER_EMAIL__<br />__MYCOMPANY_NAME__<br />__MYCOMPANY_FULLADDRESS__<br />__MYCOMPANY_EMAIL__
+
+# Config Trigger Info
+ObjectCreated  = Creation of %s
+ObjectModified = Modification of %s
+ObjectDeleted  = Deletion of %s
+ObjectValidate = Validation of %s
+ObjectLock     = Locking of %s

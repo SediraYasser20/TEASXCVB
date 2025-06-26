@@ -1,0 +1,22 @@
+CHARSET=UTF-8
+ModuleErpsavdzName=SAV Management DZ
+ModuleErpsavdzDesc=Adds an SAV tab and custom fields to Sales Orders.
+
+# For Tab Title in module descriptor
+SAVTabTitle=SAV
+
+# For labels used directly in sav_tab.php
+SAVActive=SAV Active
+SAVStatus=SAV Status
+SAVHistory=SAV History
+
+# For Extrafield 'label' properties in module descriptor
+SAV Active=SAV Active
+SAV Status=SAV Status
+SAV History=SAV History
+
+# For Extrafield 'sellist' options in module descriptor (key and value are same in definition, value is translated)
+open=Open
+in_progress=In Progress
+resolved=Resolved
+closed=Closed

@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleDeliveryTabName'
+ModuleDeliveryTabName = DeliveryTab
+# Module description 'ModuleDeliveryTabDesc'
+ModuleDeliveryTabDesc = DeliveryTab description
+
+#
+# Admin page
+#
+DeliveryTabSetup = DeliveryTab setup
+Settings = Settings
+DeliveryTabSetupPage = DeliveryTab setup page
+NewSection=New section
+DELIVERYTAB_MYPARAM1 = My param 1
+DELIVERYTAB_MYPARAM1Tooltip = My param 1 tooltip
+DELIVERYTAB_MYPARAM2=My param 2
+DELIVERYTAB_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+DeliveryTabAbout = About DeliveryTab
+DeliveryTabAboutPage = DeliveryTab about page
+
+#
+# Sample page
+#
+DeliveryTabArea = Home DeliveryTab
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

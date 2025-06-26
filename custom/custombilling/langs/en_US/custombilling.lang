@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleCustombillingName'
+ModuleCustombillingName = Custombilling
+# Module description 'ModuleCustombillingDesc'
+ModuleCustombillingDesc = Custombilling description
+
+#
+# Admin page
+#
+CustombillingSetup = Custombilling setup
+Settings = Settings
+CustombillingSetupPage = Custombilling setup page
+NewSection=New section
+CUSTOMBILLING_MYPARAM1 = My param 1
+CUSTOMBILLING_MYPARAM1Tooltip = My param 1 tooltip
+CUSTOMBILLING_MYPARAM2=My param 2
+CUSTOMBILLING_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+CustombillingAbout = About Custombilling
+CustombillingAboutPage = Custombilling about page
+
+#
+# Sample page
+#
+CustombillingArea = Home Custombilling
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleTechniquemoduleName'
+ModuleTechniquemoduleName = Techniquemodule
+# Module description 'ModuleTechniquemoduleDesc'
+ModuleTechniquemoduleDesc = Techniquemodule description
+
+#
+# Admin page
+#
+TechniquemoduleSetup = Techniquemodule setup
+Settings = Settings
+TechniquemoduleSetupPage = Techniquemodule setup page
+NewSection=New section
+TECHNIQUEMODULE_MYPARAM1 = My param 1
+TECHNIQUEMODULE_MYPARAM1Tooltip = My param 1 tooltip
+TECHNIQUEMODULE_MYPARAM2=My param 2
+TECHNIQUEMODULE_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+TechniquemoduleAbout = About Techniquemodule
+TechniquemoduleAboutPage = Techniquemodule about page
+
+#
+# Sample page
+#
+TechniquemoduleArea = Home Techniquemodule
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

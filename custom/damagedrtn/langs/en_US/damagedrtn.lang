@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleDamagedrtnName'
+ModuleDamagedrtnName = Damagedrtn
+# Module description 'ModuleDamagedrtnDesc'
+ModuleDamagedrtnDesc = Damagedrtn description
+
+#
+# Admin page
+#
+DamagedrtnSetup = Damagedrtn setup
+Settings = Settings
+DamagedrtnSetupPage = Damagedrtn setup page
+NewSection=New section
+DAMAGEDRTN_MYPARAM1 = My param 1
+DAMAGEDRTN_MYPARAM1Tooltip = My param 1 tooltip
+DAMAGEDRTN_MYPARAM2=My param 2
+DAMAGEDRTN_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+DamagedrtnAbout = About Damagedrtn
+DamagedrtnAboutPage = Damagedrtn about page
+
+#
+# Sample page
+#
+DamagedrtnArea = Home Damagedrtn
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

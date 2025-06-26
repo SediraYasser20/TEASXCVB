@@ -1,0 +1,22 @@
+CHARSET=UTF-8
+ModuleErpsavdzName=Gestion SAV DZ
+ModuleErpsavdzDesc=Ajoute un onglet SAV et des champs personnalisés aux Commandes Clients.
+
+# For Tab Title in module descriptor
+SAVTabTitle=SAV
+
+# For labels used directly in sav_tab.php
+SAVActive=Actif
+SAVStatus=Statut
+SAVHistory=Historique
+
+# For Extrafield 'label' properties in module descriptor
+SAV Active=SAV Actif
+SAV Status=Statut SAV
+SAV History=Historique SAV
+
+# For Extrafield 'sellist' options in module descriptor
+open=Ouvert
+in_progress=En cours
+resolved=Résolu
+closed=Fermé

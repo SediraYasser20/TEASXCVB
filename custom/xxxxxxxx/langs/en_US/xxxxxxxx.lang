@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleXxxxxxxxName'
+ModuleXxxxxxxxName = Xxxxxxxx
+# Module description 'ModuleXxxxxxxxDesc'
+ModuleXxxxxxxxDesc = Xxxxxxxx description
+
+#
+# Admin page
+#
+XxxxxxxxSetup = Xxxxxxxx setup
+Settings = Settings
+XxxxxxxxSetupPage = Xxxxxxxx setup page
+NewSection=New section
+XXXXXXXX_MYPARAM1 = My param 1
+XXXXXXXX_MYPARAM1Tooltip = My param 1 tooltip
+XXXXXXXX_MYPARAM2=My param 2
+XXXXXXXX_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+XxxxxxxxAbout = About Xxxxxxxx
+XxxxxxxxAboutPage = Xxxxxxxx about page
+
+#
+# Sample page
+#
+XxxxxxxxArea = Home Xxxxxxxx
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

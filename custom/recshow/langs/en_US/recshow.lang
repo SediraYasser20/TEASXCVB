@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleRecshowName'
+ModuleRecshowName = Recshow
+# Module description 'ModuleRecshowDesc'
+ModuleRecshowDesc = Recshow description
+
+#
+# Admin page
+#
+RecshowSetup = Recshow setup
+Settings = Settings
+RecshowSetupPage = Recshow setup page
+NewSection=New section
+RECSHOW_MYPARAM1 = My param 1
+RECSHOW_MYPARAM1Tooltip = My param 1 tooltip
+RECSHOW_MYPARAM2=My param 2
+RECSHOW_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+RecshowAbout = About Recshow
+RecshowAboutPage = Recshow about page
+
+#
+# Sample page
+#
+RecshowArea = Home Recshow
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

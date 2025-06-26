@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleMoshippingName'
+ModuleMoshippingName = Moshipping
+# Module description 'ModuleMoshippingDesc'
+ModuleMoshippingDesc = Moshipping description
+
+#
+# Admin page
+#
+MoshippingSetup = Moshipping setup
+Settings = Settings
+MoshippingSetupPage = Moshipping setup page
+NewSection=New section
+MOSHIPPING_MYPARAM1 = My param 1
+MOSHIPPING_MYPARAM1Tooltip = My param 1 tooltip
+MOSHIPPING_MYPARAM2=My param 2
+MOSHIPPING_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+MoshippingAbout = About Moshipping
+MoshippingAboutPage = Moshipping about page
+
+#
+# Sample page
+#
+MoshippingArea = Home Moshipping
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description

@@ -1,0 +1,3 @@
+-- This file is a placeholder.
+-- Initial data, if any, for the module can be added here.
+-- For example, pre-defined list options if not handled by 'sellist' params.

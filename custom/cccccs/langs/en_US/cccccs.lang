@@ -1,0 +1,42 @@
+# Translation file
+
+#
+# Generic
+#
+
+# Module label 'ModuleCccccsName'
+ModuleCccccsName = Cccccs
+# Module description 'ModuleCccccsDesc'
+ModuleCccccsDesc = Cccccs description
+
+#
+# Admin page
+#
+CccccsSetup = Cccccs setup
+Settings = Settings
+CccccsSetupPage = Cccccs setup page
+NewSection=New section
+CCCCCS_MYPARAM1 = My param 1
+CCCCCS_MYPARAM1Tooltip = My param 1 tooltip
+CCCCCS_MYPARAM2=My param 2
+CCCCCS_MYPARAM2Tooltip=My param 2 tooltip
+
+
+#
+# About page
+#
+About = About
+CccccsAbout = About Cccccs
+CccccsAboutPage = Cccccs about page
+
+#
+# Sample page
+#
+CccccsArea = Home Cccccs
+MyPageName = My page name
+
+#
+# Sample widget
+#
+MyWidget = My widget
+MyWidgetDescription = My widget description
