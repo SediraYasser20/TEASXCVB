@@ -5,15 +5,15 @@
  * Copyright (C) 2005-2012	Regis Houssin			<regis.houssin@inodbox.com>
  * Copyright (C) 2011-2017	Juanjo Menent			<jmenent@2byte.es>
  * Copyright (C) 2013       Florian Henry		  	<florian.henry@open-concept.pro>
- * Copyright (C) 2013       Marcos García           <marcosgdf@gmail.com>
+ * Copyright (C) 2013       Marcos GarcÃƒÂ­a           <marcosgdf@gmail.com>
  * Copyright (C) 2014		Cedric GROSS			<c.gross@kreiz-it.fr>
  * Copyright (C) 2014-2017	Francis Appels			<francis.appels@yahoo.com>
  * Copyright (C) 2015		Claudio Aschieri		<c.aschieri@19.coop>
  * Copyright (C) 2016-2018	Ferran Marcet			<fmarcet@2byte.es>
- * Copyright (C) 2016		Yasser Carreón			<yacasia@gmail.com>
- * Copyright (C) 2018-2024  Frédéric France         <frederic.france@free.fr>
+ * Copyright (C) 2016		Yasser CarreÃƒÂ³n			<yacasia@gmail.com>
+ * Copyright (C) 2018-2024  FrÃƒÂ©dÃƒÂ©ric France         <frederic.france@free.fr>
  * Copyright (C) 2020       Lenin Rivas         	<lenin@leninrivas.com>
- * Copyright (C) 2022       Josep Lluís Amador      <joseplluis@lliuretic.cat>
+ * Copyright (C) 2022       Josep LluÃƒÂ­s Amador      <joseplluis@lliuretic.cat>
  * Copyright (C) 2024		MDW						<mdeweerd@users.noreply.github.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -385,244 +385,109 @@ if ($action == 'add' && $permissiontoadd) {
 
             // Batch/Serial managed products
             if (isModEnabled('productbatch') && $product_management_mode > 0) {
-                if ($product_management_mode == 2) { // Serialized product
-                    $serials_input_name = "serials[".$i."]";
-                    $serials_warehouse_input_name = "serial_warehouse[".$i."]"; // Name of warehouse select for each serial
+                $k = 0; 
+                $current_batch_field_name = $batch_input_prefix."_".$k; 
+                $current_qty_field_name = $qty_input_prefix."_".$k;     
 
-                    if (isset($_POST['serials'][$i]) && is_array($_POST['serials'][$i])) {
-                        $entered_serials = $_POST['serials'][$i];
-                        $serial_warehouses = isset($_POST['serial_warehouse'][$i]) && is_array($_POST['serial_warehouse'][$i]) ? $_POST['serial_warehouse'][$i] : array();
+                if (GETPOSTISSET($current_batch_field_name)) { 
+                    while (GETPOSTISSET($current_batch_field_name)) {
+                        $qty_val = price2num(GETPOST($current_qty_field_name, 'alpha'), 'MS');
+                        $batch_id_val = GETPOSTINT($current_batch_field_name);
 
-                        $qty_from_serials = 0;
-                        foreach ($entered_serials as $serial_idx => $serial_number) {
-                            $serial_number = trim($serial_number);
-                            if (!empty($serial_number)) {
-                                $qty_from_serials++; // Each non-empty serial counts as 1
-
-                                $warehouse_id_for_serial = null;
-                                if (isset($serial_warehouses[$serial_idx]) && $serial_warehouses[$serial_idx] > 0) {
-                                    $warehouse_id_for_serial = (int) $serial_warehouses[$serial_idx];
-                                } elseif (GETPOSTINT('entrepot_id') > 0) { // Fallback to general warehouse if per-serial not set
-                                    $warehouse_id_for_serial = GETPOSTINT('entrepot_id');
+                        if ($qty_val > 0) {
+                            if ($product_management_mode == 2) {
+                                if ($qty_val > 1) {
+                                    setEventMessages($langs->trans("TooManyQtyForSerialNumber", $product_ref_for_error_msg), null, 'errors');
+                                    $error++; break 2; 
                                 }
-
-                                if (empty($warehouse_id_for_serial) && isModEnabled('stock')) {
-                                     setEventMessages($langs->trans("ErrorWarehouseNotSelectedForSerial", $serial_number, $product_ref_for_error_msg), null, 'errors');
-                                     $error++; break; // Stop processing this line's serials
+                                // Create unique serial key per product to avoid conflicts
+                                $serial_key = $effective_fk_product_for_line . '_' . $batch_id_val;
+                                if (in_array($serial_key, $product_batch_used_for_serial_check)) {
+                                    setEventMessages($langs->trans("SerialAlreadyUsed", $product_ref_for_error_msg), null, 'errors');
+                                    $error++; break 2; 
                                 }
+                                $product_batch_used_for_serial_check[] = $serial_key;
 
-                                // Fetch product_batch rowid using serial number, product_id, and warehouse_id
-                                $productbatch_entry = new Productbatch($db);
-                                // We need to find the llx_product_batch.rowid
-                                // This requires joining llx_product_batch with llx_product_stock
-                                $sql_find_batch = "SELECT pb.rowid FROM ".MAIN_DB_PREFIX."product_batch as pb";
-                                $sql_find_batch .= " JOIN ".MAIN_DB_PREFIX."product_stock as ps ON pb.fk_product_stock = ps.rowid";
-                                $sql_find_batch .= " WHERE pb.batch = '".$db->escape($serial_number)."'";
-                                $sql_find_batch .= " AND ps.fk_product = ".((int) $effective_fk_product_for_line);
-                                if ($warehouse_id_for_serial > 0) {
-                                    $sql_find_batch .= " AND ps.fk_entrepot = ".((int) $warehouse_id_for_serial);
-                                }
-                                $resql_find_batch = $db->query($sql_find_batch);
-                                if ($resql_find_batch) {
-                                    if ($db->num_rows($resql_find_batch) == 1) {
-                                        $obj_batch = $db->fetch_object($resql_find_batch);
-                                        $batch_id_val = $obj_batch->rowid;
-
-                                        // Create unique serial key per product to avoid conflicts
-                                        $serial_key = $effective_fk_product_for_line . '_' . $batch_id_val;
-                                        if (in_array($serial_key, $product_batch_used_for_serial_check)) {
-                                            setEventMessages($langs->trans("SerialAlreadyUsed", $serial_number, $product_ref_for_error_msg), null, 'errors');
-                                            $error++; break; // Stop processing this line's serials
+                                // Custom validation for Product 483 linked to an MO
+                                // $is_mo_line is determined before this loop, based on $current_order_line->fk_product being empty and description matching.
+                                // $current_order_line is $objectsrc->lines[$i]
+                                // $effective_fk_product_for_line is 483 if $is_mo_line is true.
+                                if ($is_mo_line && $effective_fk_product_for_line == 483) {
+                                    $mo_ref_from_db = '';
+                                    // Fetch the MO reference using fk_mrp_mo from the order line
+                                    if (!empty($current_order_line->fk_mrp_mo)) {
+                                        $sql_mo_ref = "SELECT ref FROM ".MAIN_DB_PREFIX."mrp_mo WHERE rowid = ".((int) $current_order_line->fk_mrp_mo);
+                                        $resql_mo_ref = $db->query($sql_mo_ref);
+                                        if ($resql_mo_ref) {
+                                            if ($db->num_rows($resql_mo_ref) > 0) {
+                                                $obj_mo_ref = $db->fetch_object($resql_mo_ref);
+                                                $mo_ref_from_db = $obj_mo_ref->ref;
+                                            } else {
+                                                setEventMessages($langs->trans("ErrorMORecordNotFoundForFK", $current_order_line->fk_mrp_mo), null, 'errors');
+                                                $error++; break 2;
+                                            }
+                                        } else {
+                                            setEventMessages($langs->trans("ErrorFailedToFetchMORefDB", $db->lasterror()), null, 'errors');
+                                            $error++; break 2;
                                         }
-                                        $product_batch_used_for_serial_check[] = $serial_key;
-                                        
-                                        // MO Validation for Product 31 (remains important)
-                                        if ($is_mo_line && $effective_fk_product_for_line == 483) {
-                                            $mo_ref_from_db = '';
-                                            if (!empty($current_order_line->fk_mrp_mo)) {
-                                                // ... (fetch MO ref from fk_mrp_mo - existing logic)
-                                                $sql_mo_ref_val = "SELECT ref FROM ".MAIN_DB_PREFIX."mrp_mo WHERE rowid = ".((int) $current_order_line->fk_mrp_mo);
-                                                $resql_mo_ref_val = $db->query($sql_mo_ref_val);
-                                                if ($resql_mo_ref_val && $db->num_rows($resql_mo_ref_val) > 0) {
-                                                    $obj_mo_ref_val = $db->fetch_object($resql_mo_ref_val);
-                                                    $mo_ref_from_db = $obj_mo_ref_val->ref;
-                                                } else { /* error handling */ }
-                                            } else if (preg_match('/^(Costum-PC\S+)/', trim($current_order_line->description), $matches_desc_mo)) {
-                                                $mo_ref_from_db = $matches_desc_mo[1];
-                                            } else { /* error handling */ }
+                                    } else {
+                                        // Fallback: Try to parse from description if fk_mrp_mo is not set
+                                        // This part assumes $current_order_line->description is the original description of the MO line
+                                        if (preg_match('/^(Costum-PC\S+)/', trim($current_order_line->description), $matches_desc_mo)) {
+                                            $mo_ref_from_db = $matches_desc_mo[1];
+                                        } else {
+                                            // If fk_mrp_mo is not set and description doesn't match, it's an error for Product 483 MO lines.
+                                            setEventMessages($langs->trans("ErrorMORefLinkOrDescMissing", $current_order_line->id), null, 'errors');
+                                            $error++; break 2;
+                                        }
+                                    }
 
-                                            if ($mo_ref_from_db) {
-                                                $base_mo_ref = getBaseSerialNumberPart($mo_ref_from_db);
-                                                $base_entered_serial = getBaseSerialNumberPart($serial_number);
-                                                if ($base_mo_ref !== $base_entered_serial) {
-                                                    setEventMessages($langs->trans("ErrorSerialBaseDoesNotMatchMOBase", $serial_number, $mo_ref_from_db), null, 'errors');
-                                                    $error++; break;
-                                                } else {
-                                                    if (strlen($serial_number) > strlen($base_entered_serial)) {
-                                                        $suffix_part = substr($serial_number, strlen($base_entered_serial));
-                                                        if (!preg_match('/^-([1-9]\d*)$/', $suffix_part)) {
-                                                            setEventMessages($langs->trans("ErrorSerialSuffixInvalidFormat", $serial_number, $base_entered_serial), null, 'errors');
-                                                            $error++; break;
-                                                        }
-                                                    }
+                                    $productbatch_entry = new Productbatch($db);
+                                    // $batch_id_val is the rowid from llx_product_batch table
+                                    if ($batch_id_val > 0 && $productbatch_entry->fetch($batch_id_val) > 0) {
+                                        $entered_serial = $productbatch_entry->batch; // This is the actual serial string
+
+                                        // New validation using getBaseSerialNumberPart
+                                        $base_mo_ref = getBaseSerialNumberPart($mo_ref_from_db);
+                                        $base_entered_serial = getBaseSerialNumberPart($entered_serial);
+
+                                        if ($base_mo_ref !== $base_entered_serial) {
+                                            setEventMessages($langs->trans("ErrorSerialBaseDoesNotMatchMOBase", $entered_serial, $mo_ref_from_db), null, 'errors');
+                                            $error++; break 2;
+                                        } else {
+                                            // Base parts match. Now, additionally check the suffix for serials that are expected to have one.
+                                            if (strlen($entered_serial) > strlen($base_entered_serial)) {
+                                                $suffix_part = substr($entered_serial, strlen($base_entered_serial));
+                                                // Suffix must be like "-1", "-23", etc. (a hyphen followed by a positive integer)
+                                                // preg_match('/^-([1-9]\d*)$/', $suffix_part, $matches_suffix)
+                                                // Ensure $matches_suffix[1] is a positive integer. Simply is_numeric is not enough (e.g. -0, -007)
+                                                if (!preg_match('/^-([1-9]\d*)$/', $suffix_part)) {
+                                                    setEventMessages($langs->trans("ErrorSerialSuffixInvalidFormat", $entered_serial, $base_entered_serial), null, 'errors');
+                                                    $error++; break 2;
                                                 }
                                             }
+                                            // If strlen($entered_serial) == strlen($base_entered_serial), an exact match of bases is accepted.
                                         }
-
-                                        $sub_qty_details[] = array('q' => 1, 'id_batch' => $batch_id_val);
-
-                                    } else if ($db->num_rows($resql_find_batch) == 0) {
-                                        setEventMessages($langs->trans("ErrorSerialNumberNotFoundInStock", $serial_number, $product_ref_for_error_msg, ($warehouse_id_for_serial ? $langs->trans("Warehouse").' ID '.$warehouse_id_for_serial : $langs->trans("any warehouse"))), null, 'errors');
-                                        $error++; break; // Stop processing this line's serials
                                     } else {
-                                        setEventMessages($langs->trans("ErrorMultipleEntriesForSerialNumber", $serial_number, $product_ref_for_error_msg), null, 'errors');
-                                        $error++; break; // Stop processing this line's serials
+                                        setEventMessages($langs->trans("ErrorFailedToFetchBatchDetailsForID", $batch_id_val), null, 'errors');
+                                        $error++; break 2;
                                     }
-                                } else {
-                                    setEventMessages($langs->trans("ErrorFailedToQuerySerialNumber", $serial_number).': '.$db->lasterror(), null, 'errors');
-                                    $error++; break; // Stop processing this line's serials
                                 }
                             }
+                            $sub_qty_details[$k]['q'] = $qty_val;
+                            $sub_qty_details[$k]['id_batch'] = $batch_id_val; // This is llx_product_batch.rowid
+                            $subtotal_qty_for_line += $qty_val;
                         }
-                        if ($error) break; // Break outer loop if error in serial processing
-
-                        $subtotal_qty_for_line = $qty_from_serials; // Total qty for this line is the count of valid serials
-                        // The main 'qtyl<X>' field should match this. It's hidden but submitted.
-                        $expected_total_qty_for_line = price2num(GETPOST($qty_input_prefix, 'alpha'), 'MS');
-                        // For serialized, we now trust the number of serials entered to be the quantity.
-                        // The $qty_input_prefix field (e.g., qtyl0) is now hidden or readonly and updated by JS for serials.
-                        // So, we use $subtotal_qty_for_line as the authoritative quantity.
-
-                        if ($subtotal_qty_for_line > 0) {
-                           $batch_line[$i]['detail'] = $sub_qty_details;
-                           $batch_line[$i]['qty'] = $subtotal_qty_for_line; // This is total qty for the line
-                           $batch_line[$i]['ix_l'] = $original_line_id;
-                           $batch_line[$i]['fk_product'] = $effective_fk_product_for_line;
-                        }
-                    } elseif (empty($_POST['serials'][$i]) && price2num(GETPOST($qty_input_prefix, 'alpha'), 'MS') > 0 && !getDolGlobalString('SHIPMENT_GETS_ALL_ORDER_PRODUCTS')) {
-                        // If qty is set (e.g. from order) but no serials provided for a serialized product
-                        setEventMessages($langs->trans("ErrorSerialNumbersRequired", $product_ref_for_error_msg), null, 'errors');
-                        $error++;
+                        $k++;
+                        $current_batch_field_name = $batch_input_prefix."_".$k;
+                        $current_qty_field_name = $qty_input_prefix."_".$k;
                     }
-                } elseif ($product_management_mode == 1) { // Lot-managed product (not serialized)
-                    if (isset($_POST['lots'][$i]) && is_array($_POST['lots'][$i])) {
-                        $entered_lots = $_POST['lots'][$i];
-                        $lot_sub_details = array(); // Renamed to avoid conflict with $sub_qty_details from serials
-                        $current_subtotal_for_lots = 0;
-
-                        foreach ($entered_lots as $lot_idx => $lot_data) {
-                            $lot_number = isset($lot_data['number']) ? trim($lot_data['number']) : '';
-                            $lot_qty_str = isset($lot_data['qty']) ? trim($lot_data['qty']) : '';
-                            $lot_qty = price2num($lot_qty_str, 'MS');
-
-                            if (!empty($lot_number) && $lot_qty > 0) {
-                                $warehouse_id_for_lot = null;
-                                if (isset($lot_data['warehouse']) && $lot_data['warehouse'] > 0) {
-                                    $warehouse_id_for_lot = (int) $lot_data['warehouse'];
-                                } elseif (GETPOSTINT('entrepot_id') > 0) {
-                                    $warehouse_id_for_lot = GETPOSTINT('entrepot_id');
-                                }
-
-                                if (empty($warehouse_id_for_lot) && isModEnabled('stock')) {
-                                     setEventMessages($langs->trans("ErrorWarehouseNotSelectedForLot", $lot_number, $product_ref_for_error_msg), null, 'errors');
-                                     $error++; break; 
-                                }
-
-                                // Fetch product_batch rowid using lot number, product_id, and warehouse_id
-                                $sql_find_lot_batch = "SELECT pb.rowid, pb.qty as stock_qty FROM ".MAIN_DB_PREFIX."product_batch as pb";
-                                $sql_find_lot_batch .= " JOIN ".MAIN_DB_PREFIX."product_stock as ps ON pb.fk_product_stock = ps.rowid";
-                                $sql_find_lot_batch .= " WHERE pb.batch = '".$db->escape($lot_number)."'";
-                                $sql_find_lot_batch .= " AND ps.fk_product = ".((int) $effective_fk_product_for_line);
-                                if ($warehouse_id_for_lot > 0) {
-                                    $sql_find_lot_batch .= " AND ps.fk_entrepot = ".((int) $warehouse_id_for_lot);
-                                }
-                                $resql_find_lot_batch = $db->query($sql_find_lot_batch);
-
-                                if ($resql_find_lot_batch) {
-                                    if ($db->num_rows($resql_find_lot_batch) == 1) {
-                                        $obj_lot_batch = $db->fetch_object($resql_find_lot_batch);
-                                        $batch_id_val = $obj_lot_batch->rowid;
-                                        $stock_qty_for_lot = $obj_lot_batch->stock_qty;
-
-                                        if ($lot_qty > $stock_qty_for_lot && !getDolGlobalString('STOCK_ALLOW_NEGATIVE_TRANSFER')) {
-                                            setEventMessages($langs->trans("ErrorQtyToShipExceedsLotStock", $lot_number, $lot_qty, $stock_qty_for_lot), null, 'errors');
-                                            $error++; break;
-                                        }
-                                        
-                                        $lot_sub_details[] = array('q' => $lot_qty, 'id_batch' => $batch_id_val);
-                                        $current_subtotal_for_lots += $lot_qty;
-
-                                    } else if ($db->num_rows($resql_find_lot_batch) == 0) {
-                                        setEventMessages($langs->trans("ErrorLotNumberNotFoundInStock", $lot_number, $product_ref_for_error_msg, ($warehouse_id_for_lot ? $langs->trans("Warehouse").' ID '.$warehouse_id_for_lot : $langs->trans("any warehouse"))), null, 'errors');
-                                        $error++; break; 
-                                    } else {
-                                        setEventMessages($langs->trans("ErrorMultipleEntriesForLotNumber", $lot_number, $product_ref_for_error_msg), null, 'errors');
-                                        $error++; break; 
-                                    }
-                                } else {
-                                    setEventMessages($langs->trans("ErrorFailedToQueryLotNumber", $lot_number).': '.$db->lasterror(), null, 'errors');
-                                    $error++; break; 
-                                }
-                            } elseif (!empty($lot_number) && $lot_qty <= 0) {
-                                // Lot number provided but quantity is zero or invalid
-                                // Allow if SHIPMENT_GETS_ALL_ORDER_PRODUCTS is on and it's the only entry for the line,
-                                // otherwise it's an incomplete entry.
-                                if (!(getDolGlobalString('SHIPMENT_GETS_ALL_ORDER_PRODUCTS') && count($entered_lots) == 1)) {
-                                   // setEventMessages($langs->trans("WarningLotQtyZero", $lot_number), null, 'warnings');
-                                   // If you want to make this an error, uncomment:
-                                   // setEventMessages($langs->trans("ErrorLotQtyRequired", $lot_number), null, 'errors');
-                                   // $error++; break;
-                                }
-                            }
-                        }
-                        if ($error) break; // Break outer loop if error in lot processing
-
-                        $subtotal_qty_for_line = $current_subtotal_for_lots;
-                        // Validate $subtotal_qty_for_line against the main qtylX input (which is readonly but updated by JS)
-                        $expected_total_qty_for_line = price2num(GETPOST($qty_input_prefix, 'alpha'), 'MS');
-                        if (abs($subtotal_qty_for_line - $expected_total_qty_for_line) > 0.001 && $expected_total_qty_for_line > 0) { // Using a small tolerance for float comparison
-                           // setEventMessages($langs->trans("WarningLotTotalQtyMismatch", $expected_total_qty_for_line, $subtotal_qty_for_line), null, 'warnings');
-                           // Potentially make this an error if strict matching is required.
-                        }
-                         if ($subtotal_qty_for_line > 0) {
-                            $batch_line[$i]['detail'] = $lot_sub_details;
-                            $batch_line[$i]['qty'] = $subtotal_qty_for_line;
-                            $batch_line[$i]['ix_l'] = $original_line_id;
-                            $batch_line[$i]['fk_product'] = $effective_fk_product_for_line;
-                        }
-                    } elseif (empty($_POST['lots'][$i]) && price2num(GETPOST($qty_input_prefix, 'alpha'), 'MS') > 0 && !getDolGlobalString('SHIPMENT_GETS_ALL_ORDER_PRODUCTS')) {
-                        // If qty is set but no lots provided for a lot-managed product
-                        setEventMessages($langs->trans("ErrorLotsRequired", $product_ref_for_error_msg), null, 'errors');
-                        $error++;
-                    }
-                } else { // Original logic for non-batch/serial managed products (or if productbatch module disabled)
-                    $k = 0;
-                    $current_batch_field_name = $batch_input_prefix."_".$k;
-                    $current_qty_field_name = $qty_input_prefix."_".$k;
-
-                    if (GETPOSTISSET($current_batch_field_name)) {
-                        while (GETPOSTISSET($current_batch_field_name)) {
-                            $qty_val = price2num(GETPOST($current_qty_field_name, 'alpha'), 'MS');
-                            $batch_id_val = GETPOSTINT($current_batch_field_name);
-
-                            if ($qty_val > 0) {
-                                // This part was originally for both batch and serial.
-                                // If product_management_mode was > 0 but not 1 or 2 (should not happen),
-                                // it would fall here. For safety, keep it, but it should ideally be unreachable.
-                                $sub_qty_details[$k]['q'] = $qty_val;
-                                $sub_qty_details[$k]['id_batch'] = $batch_id_val;
-                                $subtotal_qty_for_line += $qty_val;
-                            }
-                            $k++;
-                            $current_batch_field_name = $batch_input_prefix."_".$k;
-                            $current_qty_field_name = $qty_input_prefix."_".$k;
-                        }
-                        if (!$error) {
-                            $batch_line[$i]['detail'] = $sub_qty_details;
-                            $batch_line[$i]['qty'] = $subtotal_qty_for_line;
-                            $batch_line[$i]['ix_l'] = $original_line_id;
-                            $batch_line[$i]['fk_product'] = $effective_fk_product_for_line;
-                        }
+                    if (!$error) { 
+                        $batch_line[$i]['detail'] = $sub_qty_details; 
+                        $batch_line[$i]['qty'] = $subtotal_qty_for_line; 
+                        $batch_line[$i]['ix_l'] = $original_line_id;
+                        // Store the effective product ID for later use
+                        $batch_line[$i]['fk_product'] = $effective_fk_product_for_line;
                     }
                 }
             }
@@ -1279,7 +1144,7 @@ $title = $object->ref.' - '.$langs->trans("Shipment");
 if ($action == 'create2') {
 	$title = $langs->trans("CreateShipment");
 }
-$help_url = 'EN:Module_Shipments|FR:Module_Expéditions|ES:M&oacute;dulo_Expediciones|DE:Modul_Lieferungen';
+$help_url = 'EN:Module_Shipments|FR:Module_ExpÃƒÂ©ditions|ES:M&oacute;dulo_Expediciones|DE:Modul_Lieferungen';
 
 llxHeader('', $title, $help_url, '', 0, 0, '', '', '', 'mod-expedition page-card');
 
@@ -1518,7 +1383,7 @@ if ($action == 'create') {
 // --- BEGINNING OF NEW CODE BLOCK (Modify llx_commandedet for MO lines) ---
 if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($object->lines) && is_array($object->lines)) {
     $product_id_for_mo = 483; // As specified
-    // Determine product_type for product 31. Fetching it once would be efficient.
+    // Determine product_type for product 483. Fetching it once would be efficient.
     $product_type_for_mo = null;
     if (!class_exists('Product')) { // Ensure Product class is available
         require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
@@ -1528,7 +1393,7 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
         $product_type_for_mo = $temp_product_for_type->type;
     } else {
         dol_syslog("expedition/card.php: Warning - Could not fetch Product ID " . $product_id_for_mo . " to determine its type. MO lines might not have correct product_type set on order line.", LOG_WARNING);
-        // Fallback to a generic product type if product 31 cannot be fetched, though this indicates a setup issue.
+        // Fallback to a generic product type if product 483 cannot be fetched, though this indicates a setup issue.
         $product_type_for_mo = Product::TYPE_PRODUCT;
     }
 
@@ -1573,8 +1438,8 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
                         if ($product_type_for_mo !== null) {
                              $object->lines[$index]->product_type = $product_type_for_mo;
                         }
-                        // If Product 31's label should replace the MO description for display on this page:
-                        // $object->lines[$index]->product_label = $temp_product_for_type->label; // Assumes $temp_product_for_type is Product 31
+                        // If Product 483's label should replace the MO description for display on this page:
+                        // $object->lines[$index]->product_label = $temp_product_for_type->label; // Assumes $temp_product_for_type is Product 483
                         // $object->lines[$index]->label = $temp_product_for_type->label;
                     } else {
                         dol_syslog("expedition/card.php: Failed to update OrderLine ID " . $line_to_update->id . " in DB. Error: " . $line_to_update->error, LOG_ERR);
@@ -1636,7 +1501,7 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 				print '<td class="center">'.$langs->trans("QtyOrdered").'</td>';
 				print '<td class="center">'.$langs->trans("QtyShipped").'</td>';
 				print '<td class="center">'.$langs->trans("QtyToShip");
-				if (empty($conf->productbatch->enabled)) { // This check might need to be more nuanced if Product 31 has batches
+				if (empty($conf->productbatch->enabled)) { // This check might need to be more nuanced if Product 483 has batches
 					print '<br><a href="#" id="autofill" class="opacitymedium link cursor cursorpointer">'.img_picto($langs->trans("Autofill"), 'autofill', 'class="paddingrightonly"').'</a>';
 					print ' / ';
 				} else {
@@ -1645,7 +1510,7 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 				print '<span id="autoreset" class="opacitymedium link cursor cursorpointer">'.img_picto($langs->trans("Reset"), 'eraser').'</span>';
 				print '</td>';
 				if (isModEnabled('stock')) {
-					if (empty($conf->productbatch->enabled)) { // This check might need to be more nuanced if Product 31 has batches
+					if (empty($conf->productbatch->enabled)) { // This check might need to be more nuanced if Product 483 has batches
 						print '<td class="left">'.$langs->trans("Warehouse").' ('.$langs->trans("Stock").')</td>';
 					} else {
 						print '<td class="left">'.$langs->trans("Warehouse").' / '.$langs->trans("Batch").' ('.$langs->trans("Stock").')</td>';
@@ -1668,7 +1533,7 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 
 			$indiceAsked = 0;
 			while ($indiceAsked < $numAsked) {
-				$product = new Product($db);// Instantiated for each line, good
+				$product = new Product($db); // Instantiated for each line, good
 				$line = $object->lines[$indiceAsked]; // This is the Sales Order line
 
                 // Store original line properties for potential use, especially if MO line's fk_product was just updated.
@@ -1679,7 +1544,7 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
                 // Consolidated MO line identification, MO ref extraction, and product ID determination for display/logic
                 $is_mo_line = false;
                 $target_mo_serial_ref = null;
-                // Start with the actual fk_product from the line. This will be overridden to 31 if it's an MO line.
+                // Start with the actual fk_product from the line. This will be overridden to 483 if it's an MO line.
                 $fk_product_to_use_for_display = $line->fk_product;
 
                 if (isset($line->description) &&
@@ -1687,8 +1552,8 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
                     strpos($line->description, '(Fabrication)') !== false) {
 
                     $is_mo_line = true;
-                    // If it IS an MO line, then fk_product_to_use_for_display should be 31.
-                    // The actual Product 31 object will be fetched later when $product->fetch($fk_product_to_use_for_display) is called.
+                    // If it IS an MO line, then fk_product_to_use_for_display should be 483.
+                    // The actual Product 483 object will be fetched later when $product->fetch($fk_product_to_use_for_display) is called.
                     $fk_product_to_use_for_display = 483;
 
                     if (preg_match('/^(Costum-PC\S+)/', trim($line->description), $matches)) {
@@ -1714,7 +1579,7 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
                 $target_mo_serial_ref = null; 
 
                 // Identify MO line based *solely* on description pattern now,
-                // as fk_product would have been updated to 31 for MO lines in the preceding step (before this loop).
+                // as fk_product would have been updated to 483 for MO lines in the preceding step (before this loop).
                 if (isset($line->description) && 
                     strpos($line->description, 'Costum-PC') === 0 &&  // Check if description starts with "Costum-PC"
                     strpos($line->description, '(Fabrication)') !== false) { // Check if description contains "(Fabrication)"
@@ -1741,7 +1606,7 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
                 }
                 // If not, it's the original fk_product.
                 $fk_product_to_use_for_display = $line->fk_product;
-                // $mo_product_id_override = 31; // This is already implicitly handled if $line->fk_product is 31
+                // $mo_product_id_override = 483; // This is already implicitly handled if $line->fk_product is 483
 
 				$parameters = array('i' => $indiceAsked, 'line' => $line, 'num' => $numAsked);
 				$reshook = $hookmanager->executeHooks('printObjectLine', $parameters, $object, $action);
@@ -1752,12 +1617,12 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 				if (empty($reshook)) {
 					// Show product and description
                     // The original code determined $type based on $line->product_type or $line->fk_product_type.
-                    // For MO lines, $product->type (from product 31) will be more relevant if $fk_product_to_use_for_display > 0.
+                    // For MO lines, $product->type (from product 483) will be more relevant if $fk_product_to_use_for_display > 0.
 					$type = $line->product_type ? $line->product_type : $line->fk_product_type; // Original type determination
-					if ($fk_product_to_use_for_display > 0 && isset($product->type)) { // If we fetched product 31
-                        $type = $product->type; // Use product 31's type
-                    } elseif ($is_mo_line) { // MO line but product 31 fetch failed (should be handled) or type not set
-                        // Default to product type for MOs if product 31 info is incomplete
+					if ($fk_product_to_use_for_display > 0 && isset($product->type)) { // If we fetched product 483
+                        $type = $product->type; // Use product 483's type
+                    } elseif ($is_mo_line) { // MO line but product 483 fetch failed (should be handled) or type not set
+                        // Default to product type for MOs if product 483 info is incomplete
                         $type = Product::TYPE_PRODUCT; 
                     } else {
                         // Try to enhance type detection using date_start and date_end for free lines
@@ -1772,13 +1637,13 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 					// Product label
                     // Modified product label section:
                     if ($fk_product_to_use_for_display > 0) {  // If product is to be used (original or MO override)
-                        $resFetchProdDisplay = $product->fetch($fk_product_to_use_for_display); // $product object now holds details of product 31 for MOs
+                        $resFetchProdDisplay = $product->fetch($fk_product_to_use_for_display); // $product object now holds details of product 483 for MOs
                         if ($resFetchProdDisplay < 0) {
                             setEventMessages($product->error." Product ID: ".$fk_product_to_use_for_display, $product->errors, 'errors'); // More context
                             // Display minimal info or skip if product is critical
                             print '<td>Error fetching product ID: '.$fk_product_to_use_for_display.'</td>';
                         } else {
-                            $product->load_stock('warehouseopen'); // Load stock for product 31 (or original product)
+                            $product->load_stock('warehouseopen'); // Load stock for product 483 (or original product)
 
                             print '<td>'; // Start of the cell for product description
                             print '<a name="'.$line->id.'"></a>'; // Anchor with original sales order line ID
@@ -1844,7 +1709,7 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 
 					// Qty to ship
 					$quantityAsked = $line->qty;
-                    // $type here should be correctly set for Product 31 if it's an MO line.
+                    // $type here should be correctly set for Product 483 if it's an MO line.
 					if ($type == Product::TYPE_SERVICE && !getDolGlobalString('STOCK_SUPPORTS_SERVICES') && !getDolGlobalString('SHIPMENT_SUPPORTS_SERVICES')) {
 						$quantityToBeDelivered = 0;
 					} else {
@@ -1860,9 +1725,9 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 					if (count($warehousePicking) == 1 || !($fk_product_to_use_for_display > 0) || !isModEnabled('stock')) {     // If warehouse was already selected or if product is not a predefined, we go into this part with no multiwarehouse selection
 						print '<!-- Case warehouse already known or product not a predefined product -->';
 						//ship from preselected location
-                        // $product->stock_warehouse comes from product 31 for MO lines
+                        // $product->stock_warehouse comes from product 483 for MO lines
 						$stock = + (isset($product->stock_warehouse[$warehouse_id]->real) ? $product->stock_warehouse[$warehouse_id]->real : 0); // Convert to number
-						if ($type == Product::TYPE_SERVICE && getDolGlobalString('SHIPMENT_SUPPORTS_SERVICES')) { // $type is from Prod 31 for MO
+						if ($type == Product::TYPE_SERVICE && getDolGlobalString('SHIPMENT_SUPPORTS_SERVICES')) { // $type is from Prod 483 for MO
 							$deliverableQty = $quantityToBeDelivered;
 						} else {
 							$deliverableQty = min($quantityToBeDelivered, $stock);
@@ -1870,17 +1735,25 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 						if ($deliverableQty < 0) {
 							$deliverableQty = 0;
 						}
-                        // $product->hasbatch() comes from product 31 for MO lines
+                        // $product->hasbatch() comes from product 483 for MO lines
 						if (empty($conf->productbatch->enabled) || !$product->hasbatch()) {
 							// Quantity to send
 							print '<td class="center">';
-                            // $type is from Prod 31 for MO
+                            // $type is from Prod 483 for MO
 							if ($type == Product::TYPE_PRODUCT || getDolGlobalString('STOCK_SUPPORTS_SERVICES') || ($type == Product::TYPE_SERVICE && getDolGlobalString('SHIPMENT_SUPPORTS_SERVICES'))) {
 								if (GETPOSTINT('qtyl'.$indiceAsked)) {
 									$deliverableQty = GETPOSTINT('qtyl'.$indiceAsked);
 								}
+								// New condition for readonly and value 0
+								$input_readonly = '';
+								$final_deliverable_qty = $deliverableQty;
+								if ($quantityAsked == $quantityDelivered) {
+									$final_deliverable_qty = 0;
+									$input_readonly = ' readonly="readonly"';
+								}
+
 								print '<input name="idl'.$indiceAsked.'" type="hidden" value="'.$line->id.'">';
-								print '<input name="qtyl'.$indiceAsked.'" id="qtyl'.$indiceAsked.'" class="qtyl right" type="text" size="4" value="'.$deliverableQty.'">';
+								print '<input name="qtyl'.$indiceAsked.'" id="qtyl'.$indiceAsked.'" class="qtyl right" type="text" size="4" value="'.$final_deliverable_qty.'"'.$input_readonly.'>';
 							} else {
 								if (getDolGlobalString('SHIPMENT_GETS_ALL_ORDER_PRODUCTS')) {
 									print '<input name="idl'.$indiceAsked.'" type="hidden" value="'.$line->id.'">';
@@ -1894,13 +1767,13 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 							// Stock
 							if (isModEnabled('stock')) {
 								print '<td class="left">';
-                                // $type is from Prod 31 for MO
+                                // $type is from Prod 483 for MO
 								if ($type == Product::TYPE_PRODUCT || getDolGlobalString('STOCK_SUPPORTS_SERVICES')) {   // Type of product need stock change ?
 									// Show warehouse combo list
 									$ent = "entl".$indiceAsked;
 									$idl = "idl".$indiceAsked;
 									$tmpentrepot_id = is_numeric(GETPOST($ent)) ? GETPOSTINT($ent) : $warehouse_id;
-                                    // $fk_product_to_use_for_display is Prod 31 ID for MO
+                                    // $fk_product_to_use_for_display is Prod 483 ID for MO
 									if ($fk_product_to_use_for_display > 0) {
 										print '<!-- Show warehouse selection -->';
 
@@ -1908,7 +1781,7 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 										if (!getDolGlobalInt('STOCK_ALLOW_NEGATIVE_TRANSFER')) {
 											$stockMin = 0;
 										}
-                                        // selectWarehouses will use $fk_product_to_use_for_display (Prod 31 for MO)
+                                        // selectWarehouses will use $fk_product_to_use_for_display (Prod 483 for MO)
 										print $formproduct->selectWarehouses($tmpentrepot_id, 'entl'.$indiceAsked, '', 1, 0, $fk_product_to_use_for_display, '', 1, 0, array(), 'minwidth200', array(), 1, $stockMin, 'stock DESC, e.ref');
 
 										if ($tmpentrepot_id > 0 && $tmpentrepot_id == $warehouse_id) {
@@ -1929,9 +1802,9 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 							print "</tr>\n";
 
 							// Show subproducts of product
-                            // $fk_product_to_use_for_display is Prod 31 ID for MO
+                            // $fk_product_to_use_for_display is Prod 483 ID for MO
 							if (getDolGlobalString('PRODUIT_SOUSPRODUITS') && $fk_product_to_use_for_display > 0) {
-                                // $product object is already Prod 31 for MO
+                                // $product object is already Prod 483 for MO
 								$product->get_sousproduits_arbo();
 								$prods_arbo = $product->get_arbo_each_prod($qtyProdCom); // $qtyProdCom is from original order line
 								if (count($prods_arbo) > 0) {
@@ -1952,63 +1825,9 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 									}
 								}
 							}
-						} elseif ($product->status_batch == 2) { // Product is serialized
-							print '<input name="idl'.$indiceAsked.'" type="hidden" value="'.$line->id.'">';
-							// Keep the main quantity input hidden or read-only for serialized products,
-							// as the quantity will be determined by the number of serials entered.
-							// We still need qtylX for backend processing to know how many serials were expected.
-							print '<input name="qtyl'.$indiceAsked.'" id="qtyl'.$indiceAsked.'" type="hidden" value="'.round($quantityToBeDelivered, 0).'">';
-
-							print '<td class="center" colspan="1">'; // Colspan 1 for QtyToShip cell
-							print round($quantityToBeDelivered, 0); // Display the quantity to be shipped
-							print '</td>';
-
-							print '<td class="left" colspan="'.(isModEnabled('stock') ? (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') ? 2 : 1) : (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') ? 1 : 0) + 0).'">'; // Adjusted colspan
-							print '<!-- Serial number inputs -->';
-							if ($quantityToBeDelivered > 0) {
-								for ($k = 0; $k < round($quantityToBeDelivered, 0); $k++) {
-									print '<input type="text" name="serials['.$indiceAsked.']['.$k.']" class="minwidth150" placeholder="'.$langs->trans("EnterSerialNumber").' #'.($k+1).'"><br>';
-								}
-							} else {
-								print $langs->trans("NoQuantityToShip");
-							}
-							print '</td>';
-							if (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') && !isModEnabled('stock')) { // If stock module is disabled but date entry is enabled.
-								print '<td></td>';
-							}
-							print "</tr>\n";
-						} elseif ($product->status_batch == 1) { // Product is Lot-managed (but not serialized)
-							// This is where we implement the new UI for lot-tracked products.
-							print '<input name="idl'.$indiceAsked.'" type="hidden" value="'.$line->id.'">';
-							// The main quantity 'qtylX' will be the sum of quantities from entered lots.
-							// We can make it hidden or read-only and update with JS, or calculate on backend.
-							// For now, let's keep it visible for user to confirm total, but it won't directly drive lot selection.
-							print '<td class="center">';
-							print '<input name="qtyl'.$indiceAsked.'" id="qtyl'.$indiceAsked.'" class="qtyl right main-qty-for-lots" type="text" size="4" value="'.round($quantityToBeDelivered, 0).'">'; // Removed readonly
-							print '</td>';
-
-							print '<td class="left" colspan="'.(isModEnabled('stock') ? (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') ? 2 : 1) : (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') ? 1 : 0) +0).'">'; // Adjusted colspan
-							print '<!-- Lot number and quantity inputs -->';
-							print '<div id="lot_entries_line_'.$indiceAsked.'">';
-							// Initial entry row for lot
-							print '<div class="lot_entry_row">';
-							print '<input type="text" name="lots['.$indiceAsked.'][0][number]" class="minwidth150" placeholder="'.$langs->trans("EnterLotNumber").'"> ';
-							print $langs->trans("Qty").': <input type="text" name="lots['.$indiceAsked.'][0][qty]" size="4" class="lot_qty_input" data-line-index="'.$indiceAsked.'"> ';
-							if (isModEnabled('stock')) {
-								print $langs->trans("FromWarehouse").': ';
-								print $formproduct->selectWarehouses(GETPOSTINT('entrepot_id'), 'lots['.$indiceAsked.'][0][warehouse]', '', 1, 0, $fk_product_to_use_for_display, '', 0, 0, array(), 'minwidth150 lot_warehouse_input', array(), 0, null, 'stock DESC, e.ref');
-							}
-							print '</div>'; //end lot_entry_row
-							print '</div>'; //end lot_entries_line_X
-							print '<button type="button" class="buttonaddlot" data-line-index="'.$indiceAsked.'">'.$langs->trans("AddAnotherLot").'</button>';
-							print '</td>';
-							if (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') && !isModEnabled('stock')) {
-								print '<td></td>';
-							}
-							print "</tr>\n";
-						} else { // Product needs lot (Product 31 for MO lines) - This is the original 'else' for status_batch == 1 or specific MO logic
+						} else { // Product needs lot (Product 483 for MO lines)
 							// Product need lot
-							print '<td></td><td></td>'; // These are for QtyToShip and Warehouse cells for the main line
+							print '<td></td><td></td>';
 							if (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE')) {
 								print '<td></td>';
 							} //StockEntrydate
@@ -2023,24 +1842,24 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 							$subj = 0;
 							// Define nb of lines suggested for this order line
 							$nbofsuggested = 0;
-                            // $product->stock_warehouse is from Prod 31 for MO
+                            // $product->stock_warehouse is from Prod 483 for MO
 							if (is_object($product->stock_warehouse[$warehouse_id]) && count($product->stock_warehouse[$warehouse_id]->detail_batch)) {
 								foreach ($product->stock_warehouse[$warehouse_id]->detail_batch as $dbatch) {
 									$nbofsuggested++;
 								}
 							}
 							print '<input name="idl'.$indiceAsked.'" type="hidden" value="'.$line->id.'">';
-                            // $product->stock_warehouse is from Prod 31 for MO
+                            // $product->stock_warehouse is from Prod 483 for MO
 							if (is_object($product->stock_warehouse[$warehouse_id]) && count($product->stock_warehouse[$warehouse_id]->detail_batch)) {
 								foreach ($product->stock_warehouse[$warehouse_id]->detail_batch as $dbatch) {	// $dbatch is instance of Productbatch
 									//var_dump($dbatch);
 									$batchStock = + $dbatch->qty; // To get a numeric
-									$deliverableQtyLoop = min($quantityToBeDelivered, $batchStock); // Use a different variable for the loop
+									$deliverableQty = min($quantityToBeDelivered, $batchStock);
 
 									// Now we will check if we have to reduce the deliverableQty by taking into account the qty already suggested in previous line
-                                    // $fk_product_to_use_for_display is Prod 31 ID for MO
+                                    // $fk_product_to_use_for_display is Prod 483 ID for MO
 									if (isset($alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)])) {
-										$deliverableQtyLoop = min($quantityToBeDelivered, $batchStock - $alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)]);
+										$deliverableQty = min($quantityToBeDelivered, $batchStock - $alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)]);
 									} else {
 										if (!isset($alreadyQtyBatchSetted[$fk_product_to_use_for_display])) {
 											$alreadyQtyBatchSetted[$fk_product_to_use_for_display] = array();
@@ -2050,27 +1869,27 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 											$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch] = array();
 										}
 
-										$deliverableQtyLoop = min($quantityToBeDelivered, $batchStock);
+										$deliverableQty = min($quantityToBeDelivered, $batchStock);
 									}
 
-									if ($deliverableQtyLoop < 0) {
-										$deliverableQtyLoop = 0;
+									if ($deliverableQty < 0) {
+										$deliverableQty = 0;
 									}
 
 									$inputName = 'qtyl'.$indiceAsked.'_'.$subj;
 									if (GETPOSTISSET($inputName)) {
-										$deliverableQtyLoop = GETPOST($inputName, 'int');
+										$deliverableQty = GETPOST($inputName, 'int');
 									}
 
 									$tooltipClass = $tooltipTitle = '';
-                                    // $fk_product_to_use_for_display is Prod 31 ID for MO
+                                    // $fk_product_to_use_for_display is Prod 483 ID for MO
 									if (!empty($alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)])) {
 										$tooltipClass = ' classfortooltip';
 										$tooltipTitle = $langs->trans('StockQuantitiesAlreadyAllocatedOnPreviousLines').' : '.$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)];
 									} else {
 										$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)] = 0 ;
 									}
-									$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)] = $deliverableQtyLoop + $alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)];
+									$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)] = $deliverableQty + $alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)];
 
 									print '<!-- subj='.$subj.'/'.$nbofsuggested.' --><tr '.((($subj + 1) == $nbofsuggested) ? 'oddeven' : '').'>';
 									print '<td colspan="3" ></td><td class="center">';
@@ -2082,8 +1901,16 @@ if ($origin == 'commande' && isset($object->id) && $object->id > 0 && !empty($ob
 									if ($is_mo_line && $fk_product_to_use_for_display == 483 && !empty($base_mo_ref_for_line)) {
 										$data_attrs_for_qty_input .= ' data-basemoref="'.dol_escape_htmltag($base_mo_ref_for_line).'"';
 									}
+									// New condition for readonly and value 0
+									$input_readonly_batch_single_wh = '';
+									$final_deliverable_qty_batch_single_wh = $deliverableQty;
+									// $quantityAsked and $quantityDelivered are for the parent order line
+									if ($quantityAsked == $quantityDelivered) {
+										$final_deliverable_qty_batch_single_wh = 0;
+										$input_readonly_batch_single_wh = ' readonly="readonly"';
+									}
 // PHP $disabled_attr is removed from the input tag. JS will handle enabling/disabling.
-print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.$tooltipTitle.'" name="qtyl'.$indiceAsked.'_'.$subj.'" id="qtyl'.$indiceAsked.'_'.$subj.'" type="text" size="4" value="'.$deliverableQtyLoop.'"'.$data_attrs_for_qty_input.'>';
+print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.$tooltipTitle.'" name="qtyl'.$indiceAsked.'_'.$subj.'" id="qtyl'.$indiceAsked.'_'.$subj.'" type="text" size="4" value="'.$final_deliverable_qty_batch_single_wh.'"'.$data_attrs_for_qty_input.$input_readonly_batch_single_wh.'>';
 									print '</td>';
 
 									print '<!-- Show details of lot -->';
@@ -2102,7 +1929,7 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 										if (function_exists('getBaseSerialNumberPart')) {
 											$base_mo_ref_for_js_attr = getBaseSerialNumberPart($target_mo_serial_ref);
 										}
-										$select_more_css .= ' mo-product31-serial-select'; // Add class
+										$select_more_css .= ' mo-product483-serial-select'; // Add class
 									}
 
 									if (getDolGlobalString('CONFIG_MAIN_FORCELISTOFBATCHISCOMBOBOX')) {
@@ -2113,7 +1940,7 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 										}
 									} else {
 										print '<input name="'.$select_html_name.'" type="hidden" value="'.$dbatch->id.'">';
-										// Display the batch number textually. If it's an MO line for Product 31, this text is just for info, selection happens if forcecombo is on.
+										// Display the batch number textually. If it's an MO line for Product 483, this text is just for info, selection happens if forcecombo is on.
 										print $dbatch->batch;
 									}
 
@@ -2129,7 +1956,7 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 									$detail .= '<br>';
 									print $detail;
 
-									$quantityToBeDelivered -= $deliverableQtyLoop;
+									$quantityToBeDelivered -= $deliverableQty;
 									if ($quantityToBeDelivered < 0) {
 										$quantityToBeDelivered = 0;
 									}
@@ -2155,9 +1982,9 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 								print '</tr>';
 							}
 						}
-					} else { // ship from multiple locations (product is Product 31 for MO)
+					} else { // ship from multiple locations (product is Product 483 for MO)
 						// ship from multiple locations
-                        // $product->hasbatch() is from Prod 31 for MO
+                        // $product->hasbatch() is from Prod 483 for MO
 						if (empty($conf->productbatch->enabled) || !$product->hasbatch()) {
 							print '<!-- Case warehouse not already known and product does not need lot -->';
 							print '<td></td><td></td>';
@@ -2171,64 +1998,71 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 							// Define nb of lines suggested for this order line
 							$nbofsuggested = 0;
 
-                            // $product->stock_warehouse is from Prod 31 for MO
-							foreach ($product->stock_warehouse as $warehouse_id_loop => $stock_warehouse) { // Renamed $warehouse_id to $warehouse_id_loop
+                            // $product->stock_warehouse is from Prod 483 for MO
+							foreach ($product->stock_warehouse as $warehouse_id => $stock_warehouse) {
 								if ($stock_warehouse->real > 0 || !empty($conf->global->STOCK_ALLOW_NEGATIVE_TRANSFER)) {
 									$nbofsuggested++;
 								}
 							}
 							$tmpwarehouseObject = new Entrepot($db);
-                            // $product->stock_warehouse is from Prod 31 for MO
-							foreach ($product->stock_warehouse as $warehouse_id_loop => $stock_warehouse) {    // $stock_warehouse is product_stock // Renamed $warehouse_id
+                            // $product->stock_warehouse is from Prod 483 for MO
+							foreach ($product->stock_warehouse as $warehouse_id => $stock_warehouse) {    // $stock_warehouse is product_stock
 								$var = $subj % 2;
-								if (!empty($warehousePicking) && !in_array($warehouse_id_loop, $warehousePicking)) { // Use $warehouse_id_loop
+								if (!empty($warehousePicking) && !in_array($warehouse_id, $warehousePicking)) {
 									// if a warehouse was selected by user, picking is limited to this warehouse and his children
 									continue;
 								}
 
-								$tmpwarehouseObject->fetch($warehouse_id_loop); // Use $warehouse_id_loop
+								$tmpwarehouseObject->fetch($warehouse_id);
 								if ($stock_warehouse->real > 0 || !empty($conf->global->STOCK_ALLOW_NEGATIVE_TRANSFER)) {
 									$stock = + $stock_warehouse->real; // Convert it to number
-									$deliverableQtyLoop = min($quantityToBeDelivered, $stock); // Use $deliverableQtyLoop
-									$deliverableQtyLoop = max(0, $deliverableQtyLoop); // Use $deliverableQtyLoop
+									$deliverableQty = min($quantityToBeDelivered, $stock);
+									$deliverableQty = max(0, $deliverableQty);
 									// Quantity to send
 									print '<!-- subj='.$subj.'/'.$nbofsuggested.' --><tr '.((($subj + 1) == $nbofsuggested) ? 'oddeven' : '').'>';
 									print '<td colspan="3" ></td><td class="center"><!-- qty to ship (no lot management for product line indiceAsked='.$indiceAsked.') -->';
-                                    // $type is from Prod 31 for MO
+                                    // $type is from Prod 483 for MO
 									if ($type == Product::TYPE_PRODUCT || getDolGlobalString('STOCK_SUPPORTS_SERVICES') || getDolGlobalString('SHIPMENT_SUPPORTS_SERVICES')) {
-                                        // $fk_product_to_use_for_display is Prod 31 ID for MO
-										if (isset($alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id_loop)])) { // Use $warehouse_id_loop
-											$deliverableQtyLoop = min($quantityToBeDelivered, $stock - $alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id_loop)]); // Use $warehouse_id_loop
+                                        // $fk_product_to_use_for_display is Prod 483 ID for MO
+										if (isset($alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id)])) {
+											$deliverableQty = min($quantityToBeDelivered, $stock - $alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id)]);
 										} else {
 											if (!isset($alreadyQtySetted[$fk_product_to_use_for_display])) {
 												$alreadyQtySetted[$fk_product_to_use_for_display] = array();
 											}
 
-											$deliverableQtyLoop = min($quantityToBeDelivered, $stock); // Use $deliverableQtyLoop
+											$deliverableQty = min($quantityToBeDelivered, $stock);
 										}
 
-										if ($deliverableQtyLoop < 0) { // Use $deliverableQtyLoop
-											$deliverableQtyLoop = 0; // Use $deliverableQtyLoop
+										if ($deliverableQty < 0) {
+											$deliverableQty = 0;
 										}
 
 										$tooltipClass = $tooltipTitle = '';
-                                        // $fk_product_to_use_for_display is Prod 31 ID for MO
-										if (!empty($alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id_loop)])) { // Use $warehouse_id_loop
+                                        // $fk_product_to_use_for_display is Prod 483 ID for MO
+										if (!empty($alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id)])) {
 											$tooltipClass = ' classfortooltip';
-											$tooltipTitle = $langs->trans('StockQuantitiesAlreadyAllocatedOnPreviousLines').' : '.$alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id_loop)]; // Use $warehouse_id_loop
+											$tooltipTitle = $langs->trans('StockQuantitiesAlreadyAllocatedOnPreviousLines').' : '.$alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id)];
 										} else {
-											$alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id_loop)] = 0; // Use $warehouse_id_loop
+											$alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id)] = 0;
 										}
 
-										$alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id_loop)] = $deliverableQtyLoop + $alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id_loop)]; // Use $warehouse_id_loop and $deliverableQtyLoop
+										$alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id)] = $deliverableQty + $alreadyQtySetted[$fk_product_to_use_for_display][intval($warehouse_id)];
 
 										$inputName = 'qtyl'.$indiceAsked.'_'.$subj;
 										if (GETPOSTISSET($inputName)) {
-											$deliverableQtyLoop = GETPOSTINT($inputName); // Use $deliverableQtyLoop
+											$deliverableQty = GETPOSTINT($inputName);
+										}
+										// New condition for readonly and value 0
+										$input_readonly_multi_wh_no_batch = '';
+										$final_deliverable_qty_multi_wh_no_batch = $deliverableQty;
+										if ($quantityAsked == $quantityDelivered) {
+											$final_deliverable_qty_multi_wh_no_batch = 0;
+											$input_readonly_multi_wh_no_batch = ' readonly="readonly"';
 										}
 
-										print '<input class="qtyl'.$tooltipClass.' right" title="'.$tooltipTitle.'" name="qtyl'.$indiceAsked.'_'.$subj.'" id="qtyl'.$indiceAsked.'" type="text" size="4" value="'.$deliverableQtyLoop.'">'; // Use $deliverableQtyLoop
-										print '<input name="ent1'.$indiceAsked.'_'.$subj.'" type="hidden" value="'.$warehouse_id_loop.'">'; // Use $warehouse_id_loop
+										print '<input class="qtyl'.$tooltipClass.' right" title="'.$tooltipTitle.'" name="qtyl'.$indiceAsked.'_'.$subj.'" id="qtyl'.$indiceAsked.'" type="text" size="4" value="'.$final_deliverable_qty_multi_wh_no_batch.'"'.$input_readonly_multi_wh_no_batch.'>';
+										print '<input name="ent1'.$indiceAsked.'_'.$subj.'" type="hidden" value="'.$warehouse_id.'">';
 									} else {
 										if (getDolGlobalString('SHIPMENT_GETS_ALL_ORDER_PRODUCTS')) {
 											print '<input name="qtyl'.$indiceAsked.'_'.$subj.'" id="qtyl'.$indiceAsked.'" type="hidden" value="0">';
@@ -2241,7 +2075,7 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 									// Stock
 									if (isModEnabled('stock')) {
 										print '<td class="left">';
-                                        // $type is from Prod 31 for MO
+                                        // $type is from Prod 483 for MO
 										if ($type == Product::TYPE_PRODUCT || getDolGlobalString('STOCK_SUPPORTS_SERVICES')) {
 											print $tmpwarehouseObject->getNomUrl(0).' ';
 
@@ -2252,7 +2086,7 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 										}
 										print '</td>';
 									}
-									$quantityToBeDelivered -= $deliverableQtyLoop; // Use $deliverableQtyLoop
+									$quantityToBeDelivered -= $deliverableQty;
 									if ($quantityToBeDelivered < 0) {
 										$quantityToBeDelivered = 0;
 									}
@@ -2264,9 +2098,9 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 								}
 							}
 							// Show subproducts of product (not recommended)
-                            // $fk_product_to_use_for_display is Prod 31 ID for MO
+                            // $fk_product_to_use_for_display is Prod 483 ID for MO
 							if (getDolGlobalString('PRODUIT_SOUSPRODUITS') && $fk_product_to_use_for_display > 0) {
-                                // $product is Prod 31 for MO
+                                // $product is Prod 483 for MO
 								$product->get_sousproduits_arbo();
 								$prods_arbo = $product->get_arbo_each_prod($qtyProdCom);
 								if (count($prods_arbo) > 0) {
@@ -2288,45 +2122,7 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 									}
 								}
 							}
-						} elseif ($product->status_batch == 2) { // Product is serialized (Multi-warehouse context)
-							print '<!-- Case warehouse not already known and product is serialized -->';
-							print '<td></td><td></td>'; // QtyToShip and Warehouse for main line
-							if (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE')) {
-								print '<td></td>';
-							}
-							print '</tr>'; // End main line
-
-							print '<input name="idl'.$indiceAsked.'" type="hidden" value="'.$line->id.'">';
-							// Hidden input for the total quantity of this line, will be updated by JS if needed or just for backend.
-							print '<input name="qtyl'.$indiceAsked.'" id="qtyl'.$indiceAsked.'" type="hidden" value="'.round($quantityToBeDelivered, 0).'">';
-
-							// Now, rows for each serial input
-							if ($quantityToBeDelivered > 0) {
-								for ($k = 0; $k < round($quantityToBeDelivered, 0); $k++) {
-									print '<tr class="oddeven">';
-									print '<td colspan="3"></td>'; // Empty cells for Description, QtyOrdered, QtyShipped
-									print '<td class="center">';
-									print ($k + 1); // Numbering for serial input
-									print '</td>';
-									print '<td class="left" colspan="'.(isModEnabled('stock') ? (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') ? 2 : 1) : (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') ? 1 : 0) + 0).'">'; // Adjusted colspan for serial input
-									print '<input type="text" name="serials['.$indiceAsked.']['.$k.']" class="minwidth200" placeholder="'.$langs->trans("EnterSerialNumber").'">';
-									// Warehouse selection for each serial, defaults to the one chosen at the top or first available
-									if (isModEnabled('stock')) {
-										$default_wh_for_serial = $warehouse_id > 0 ? $warehouse_id : ''; // Use page global or let user pick
-										print ' @ ';
-										print $formproduct->selectWarehouses($default_wh_for_serial, 'serial_warehouse['.$indiceAsked.']['.$k.']', '', 1, 0, $fk_product_to_use_for_display, '', 0, 0, array(), 'minwidth150', array(), 0, null, 'stock DESC, e.ref');
-									}
-									print '</td>';
-									if (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') && !isModEnabled('stock')) {
-										print '<td></td>';
-									}
-									print '</tr>';
-								}
-							} else {
-								print '<tr class="oddeven"><td colspan="'.(4 + (isModEnabled('stock') ? 1:0) + (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE') ? 1:0)).'">'.$langs->trans("NoQuantityToShip").'</td></tr>';
-							}
-
-						} else { // Product needs lot (batch managed, status_batch == 1) (Multi-warehouse context)
+						} else { // Product needs lot (Product 483 for MO)
 							print '<!-- Case warehouse not already known and product need lot -->';
 							print '<td></td><td></td>';
 							if (getDolGlobalString('SHIPPING_DISPLAY_STOCK_ENTRY_DATE')) {
@@ -2342,28 +2138,28 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 
 							// Define nb of lines suggested for this order line
 							$nbofsuggested = 0;
-                            // $product->stock_warehouse is from Prod 31 for MO
-							foreach ($product->stock_warehouse as $warehouse_id_loop => $stock_warehouse) { // Renamed $warehouse_id
+                            // $product->stock_warehouse is from Prod 483 for MO
+							foreach ($product->stock_warehouse as $warehouse_id => $stock_warehouse) {
 								if (($stock_warehouse->real > 0 || !empty($conf->global->STOCK_ALLOW_NEGATIVE_TRANSFER)) && (count($stock_warehouse->detail_batch))) {
 									$nbofsuggested += count($stock_warehouse->detail_batch);
 								}
 							}
 
-                            // $product->stock_warehouse is from Prod 31 for MO
-							foreach ($product->stock_warehouse as $warehouse_id_loop => $stock_warehouse) { // Renamed $warehouse_id
+                            // $product->stock_warehouse is from Prod 483 for MO
+							foreach ($product->stock_warehouse as $warehouse_id => $stock_warehouse) {
 								$var = $subj % 2;
-								if (!empty($warehousePicking) && !in_array($warehouse_id_loop, $warehousePicking)) { // Use $warehouse_id_loop
+								if (!empty($warehousePicking) && !in_array($warehouse_id, $warehousePicking)) {
 									// if a warehouse was selected by user, picking is limited to this warehouse and his children
 									continue;
 								}
 
-								$tmpwarehouseObject->fetch($warehouse_id_loop); // Use $warehouse_id_loop
+								$tmpwarehouseObject->fetch($warehouse_id);
 								if (($stock_warehouse->real > 0 || !empty($conf->global->STOCK_ALLOW_NEGATIVE_TRANSFER)) && (count($stock_warehouse->detail_batch))) {
 									foreach ($stock_warehouse->detail_batch as $dbatch) {
 										$batchStock = + $dbatch->qty; // To get a numeric
-                                        // $fk_product_to_use_for_display is Prod 31 ID for MO
-										if (isset($alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id_loop)])) { // Use $warehouse_id_loop
-											$deliverableQtyLoop = min($quantityToBeDelivered, $batchStock - $alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id_loop)]); // Use $warehouse_id_loop and $deliverableQtyLoop
+                                        // $fk_product_to_use_for_display is Prod 483 ID for MO
+										if (isset($alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)])) {
+											$deliverableQty = min($quantityToBeDelivered, $batchStock - $alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)]);
 										} else {
 											if (!isset($alreadyQtyBatchSetted[$fk_product_to_use_for_display])) {
 												$alreadyQtyBatchSetted[$fk_product_to_use_for_display] = array();
@@ -2373,27 +2169,27 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 												$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch] = array();
 											}
 
-											$deliverableQtyLoop = min($quantityToBeDelivered, $batchStock); // Use $deliverableQtyLoop
+											$deliverableQty = min($quantityToBeDelivered, $batchStock);
 										}
 
-										if ($deliverableQtyLoop < 0) { // Use $deliverableQtyLoop
-											$deliverableQtyLoop = 0; // Use $deliverableQtyLoop
+										if ($deliverableQty < 0) {
+											$deliverableQty = 0;
 										}
 
 										$inputName = 'qtyl'.$indiceAsked.'_'.$subj;
 										if (GETPOSTISSET($inputName)) {
-											$deliverableQtyLoop = GETPOSTINT($inputName); // Use $deliverableQtyLoop
+											$deliverableQty = GETPOSTINT($inputName);
 										}
 
 										$tooltipClass = $tooltipTitle = '';
-                                        // $fk_product_to_use_for_display is Prod 31 ID for MO
-										if (!empty($alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id_loop)])) { // Use $warehouse_id_loop
+                                        // $fk_product_to_use_for_display is Prod 483 ID for MO
+										if (!empty($alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)])) {
 											$tooltipClass = ' classfortooltip';
-											$tooltipTitle = $langs->trans('StockQuantitiesAlreadyAllocatedOnPreviousLines').' : '.$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id_loop)]; // Use $warehouse_id_loop
+											$tooltipTitle = $langs->trans('StockQuantitiesAlreadyAllocatedOnPreviousLines').' : '.$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)];
 										} else {
-											$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id_loop)] = 0 ; // Use $warehouse_id_loop
+											$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)] = 0 ;
 										}
-										$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id_loop)] = $deliverableQtyLoop + $alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id_loop)]; // Use $warehouse_id_loop and $deliverableQtyLoop
+										$alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)] = $deliverableQty + $alreadyQtyBatchSetted[$fk_product_to_use_for_display][$dbatch->batch][intval($warehouse_id)];
 
 										print '<!-- subj='.$subj.'/'.$nbofsuggested.' --><tr '.((($subj + 1) == $nbofsuggested) ? 'oddeven' : '').'><td colspan="3"></td><td class="center">';
 
@@ -2404,8 +2200,15 @@ print '<input class="qtyl mo-serial-qty-input '.$tooltipClass.' right" title="'.
 										if ($is_mo_line && $fk_product_to_use_for_display == 483 && !empty($base_mo_ref_for_line)) {
 											$data_attrs_for_qty_input_multiwh .= ' data-basemoref="'.dol_escape_htmltag($base_mo_ref_for_line).'"';
 										}
+										// New condition for readonly and value 0
+										$input_readonly_multi_wh_batch = '';
+										$final_deliverable_qty_multi_wh_batch = $deliverableQty;
+										if ($quantityAsked == $quantityDelivered) {
+											$final_deliverable_qty_multi_wh_batch = 0;
+											$input_readonly_multi_wh_batch = ' readonly="readonly"';
+										}
 // PHP $disabled_attr is removed from the input tag. JS will handle enabling/disabling.
-print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.$tooltipTitle.'" name="'.$inputName.'" id="'.$inputName.'" type="text" size="4" value="'.$deliverableQtyLoop.'"'.$data_attrs_for_qty_input_multiwh.'>'; // Use $deliverableQtyLoop
+print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.$tooltipTitle.'" name="'.$inputName.'" id="'.$inputName.'" type="text" size="4" value="'.$final_deliverable_qty_multi_wh_batch.'"'.$data_attrs_for_qty_input_multiwh.$input_readonly_multi_wh_batch.'>';
 										print '</td>';
 
 										print '<td class="left">';
@@ -2423,19 +2226,19 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 											if (function_exists('getBaseSerialNumberPart')) {
 												$base_mo_ref_for_js_attr = getBaseSerialNumberPart($target_mo_serial_ref);
 											}
-											$select_more_css_multiwh .= ' mo-product31-serial-select'; // Add class
+											$select_more_css_multiwh .= ' mo-product483-serial-select'; // Add class
 										}
 
 										if (getDolGlobalString('CONFIG_MAIN_FORCELISTOFBATCHISCOMBOBOX')) {
 											// Parameters for selectLotStock: $selected, $htmlname, $filterstatus, $empty, $disabled, $fk_product, $fk_entrepot, $objectLines, $empty_label, $forcecombo, $events, $morecss, $mo_ref_filter
-											print $formproduct->selectLotStock($dbatch->id, $select_html_name_multiwh, '', 1, 0, $fk_product_to_use_for_display, $warehouse_id_loop, array(), '', 1, array(), $select_more_css_multiwh, $mo_filter_for_selectlotstock_card); // Use $warehouse_id_loop
+											print $formproduct->selectLotStock($dbatch->id, $select_html_name_multiwh, '', 1, 0, $fk_product_to_use_for_display, $warehouse_id, array(), '', 1, array(), $select_more_css_multiwh, $mo_filter_for_selectlotstock_card);
 											if (!empty($base_mo_ref_for_js_attr)) {
 												print '<script type="text/javascript">$(document).ready(function() { $("#'.$select_html_name_multiwh.'").attr("data-basemoref", "'.dol_escape_js($base_mo_ref_for_js_attr).'"); });</script>';
 											}
 										} else {
 											print '<!-- Show details of lot -->';
 											print '<input name="'.$select_html_name_multiwh.'" type="hidden" value="'.$dbatch->id.'">';
-											// Display the batch number textually. If it's an MO line for Product 31, this text is just for info, selection happens if forcecombo is on.
+											// Display the batch number textually. If it's an MO line for Product 483, this text is just for info, selection happens if forcecombo is on.
 											// print $dbatch->batch; // This line is removed as requested by implication of using selectLotStock or ensuring the value comes from what is selected.
 											// The actual display of the batch number if not using forcecombo will be handled by iterating $dbatch->batch,
 											// but the selectLotStock (if used) or selectLotDataList (implicitly using filtered loadLotStock) handles available options.
@@ -2449,7 +2252,7 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 										}
 
 										//print '|'.$line->fk_product.'|'.$dbatch->batch.'|<br>';
-                                        // $fk_product_to_use_for_display is Prod 31 ID for MO
+                                        // $fk_product_to_use_for_display is Prod 483 ID for MO
 										// print $langs->trans("Batch").': '; // Batch already shown or part of select
 										// $result = $productlotObject->fetch(0, $fk_product_to_use_for_display, $dbatch->batch); // This was incorrect, should fetch by $dbatch->id
 										// if ($result > 0) {
@@ -2464,7 +2267,7 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 											print ' - '.$langs->trans("EatByDate").': '.dol_print_date($dbatch->eatby, "day");
 										}
 										print ' ('.$dbatch->qty.')';
-										$quantityToBeDelivered -= $deliverableQtyLoop; // Use $deliverableQtyLoop
+										$quantityToBeDelivered -= $deliverableQty;
 										if ($quantityToBeDelivered < 0) {
 											$quantityToBeDelivered = 0;
 										}
@@ -2485,32 +2288,46 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 							print '<!-- line not shown yet, we show it -->';
 							print '<tr class="oddeven"><td colspan="3"></td><td class="center">';
 
-                            // $type is from Prod 31 for MO
+                            // $type is from Prod 483 for MO
 							if ($type == Product::TYPE_PRODUCT || getDolGlobalString('STOCK_SUPPORTS_SERVICES')) {
 								$disabled = '';
-                                // $product->hasbatch() is from Prod 31 for MO
+                                // $product->hasbatch() is from Prod 483 for MO
 								if (isModEnabled('productbatch') && $product->hasbatch()) {
 									$disabled = 'disabled="disabled"';
 								}
 								if ($warehouse_selected_id <= 0) {		// We did not force a given warehouse, so we won't have no warehouse to change qty.
 									$disabled = 'disabled="disabled"';
 								}
-								print '<input class="qtyl right" name="qtyl'.$indiceAsked.'_'.$subj.'" id="qtyl'.$indiceAsked.'_'.$subj.'" type="text" size="4" value="0"'.($disabled ? ' '.$disabled : '').'> ';
-								if (empty($disabled) && getDolGlobalString('STOCK_ALLOW_NEGATIVE_TRANSFER')) {
+								// New condition for readonly and value 0
+								$input_readonly_no_stock_prod = '';
+								$final_val_no_stock_prod = 0;
+								if ($quantityAsked == $quantityDelivered) {
+									// Value is already 0, just make it readonly
+									$input_readonly_no_stock_prod = ' readonly="readonly"';
+								}
+								print '<input class="qtyl right" name="qtyl'.$indiceAsked.'_'.$subj.'" id="qtyl'.$indiceAsked.'_'.$subj.'" type="text" size="4" value="'.$final_val_no_stock_prod.'"'.($disabled ? ' '.$disabled : '').$input_readonly_no_stock_prod.'> ';
+								if (empty($disabled) && getDolGlobalString('STOCK_ALLOW_NEGATIVE_TRANSFER') && $quantityAsked > $quantityDelivered) { // Only add hidden input if not fully shipped
 									print '<input name="ent1' . $indiceAsked . '_' . $subj . '" type="hidden" value="' . $warehouse_selected_id . '">';
 								}
-                            // $type is from Prod 31 for MO
+                            // $type is from Prod 483 for MO
 							} elseif ($type == Product::TYPE_SERVICE && getDolGlobalString('SHIPMENT_SUPPORTS_SERVICES')) {
 								$disabled = '';
-                                // $product->hasbatch() is from Prod 31 for MO
+                                // $product->hasbatch() is from Prod 483 for MO
 								if (isModEnabled('productbatch') && $product->hasbatch()) {
 									$disabled = 'disabled="disabled"';
 								}
 								if ($warehouse_selected_id <= 0) {		// We did not force a given warehouse, so we won't have no warehouse to change qty.
 									$disabled = 'disabled="disabled"';
 								}
-								print '<input class="qtyl right" name="qtyl'.$indiceAsked.'_'.$subj.'" id="qtyl'.$indiceAsked.'_'.$subj.'" type="text" size="4" value="'.$quantityToBeDelivered.'"'.($disabled ? ' '.$disabled : '').'> ';
-								if (empty($disabled) && getDolGlobalString('STOCK_ALLOW_NEGATIVE_TRANSFER')) {
+								// New condition for readonly and value 0
+								$input_readonly_no_stock_serv = '';
+								$final_val_no_stock_serv = $quantityToBeDelivered;
+								if ($quantityAsked == $quantityDelivered) {
+									$final_val_no_stock_serv = 0;
+									$input_readonly_no_stock_serv = ' readonly="readonly"';
+								}
+								print '<input class="qtyl right" name="qtyl'.$indiceAsked.'_'.$subj.'" id="qtyl'.$indiceAsked.'_'.$subj.'" type="text" size="4" value="'.$final_val_no_stock_serv.'"'.($disabled ? ' '.$disabled : '').$input_readonly_no_stock_serv.'> ';
+								if (empty($disabled) && getDolGlobalString('STOCK_ALLOW_NEGATIVE_TRANSFER') && $quantityAsked > $quantityDelivered) { // Only add hidden input if not fully shipped
 									print '<input name="ent1' . $indiceAsked . '_' . $subj . '" type="hidden" value="' . $warehouse_selected_id . '">';
 								}
 							} else {
@@ -2519,15 +2336,15 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 							print '</td>';
 
 							print '<td class="left">';
-                            // $type is from Prod 31 for MO
+                            // $type is from Prod 483 for MO
 							if ($type == Product::TYPE_PRODUCT || getDolGlobalString('STOCK_SUPPORTS_SERVICES')) {
 								if ($warehouse_selected_id > 0) {
 									$warehouseObject = new Entrepot($db);
 									$warehouseObject->fetch($warehouse_selected_id);
 									print img_warning().' '.$langs->trans("NoProductToShipFoundIntoStock", $warehouseObject->label);
 								} else {
-                                    // $fk_product_to_use_for_display is Prod 31 for MO
-									if ($fk_product_to_use_for_display) { // Check if product is defined (Prod 31 for MO)
+                                    // $fk_product_to_use_for_display is Prod 483 for MO
+									if ($fk_product_to_use_for_display) { // Check if product is defined (Prod 483 for MO)
 										print img_warning().' '.$langs->trans("StockTooLow");
 									} else { // True free text line (no product)
 										print '';
@@ -3242,7 +3059,13 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 					foreach ($lines[$i]->detail_batch as $detail_batch) {
 						print '<tr>';
 						// Qty to ship or shipped
-						print '<td><input class="qtyl right" name="qtyl'.$detail_batch->fk_expeditiondet.'_'.$detail_batch->id.'" id="qtyl'.$line_id.'_'.$detail_batch->id.'" type="text" size="4" value="'.$detail_batch->qty.'"></td>';
+					$readonly_edit_attr = '';
+					$value_edit_qty = $detail_batch->qty;
+					if ($lines[$i]->qty_asked <= $qtyalreadysent) {
+						$readonly_edit_attr = ' readonly="readonly"';
+						$value_edit_qty = 0;
+					}
+					print '<td><input class="qtyl right" name="qtyl'.$detail_batch->fk_expeditiondet.'_'.$detail_batch->id.'" id="qtyl'.$line_id.'_'.$detail_batch->id.'" type="text" size="4" value="'.$value_edit_qty.'"'.$readonly_edit_attr.'></td>';
 						// Batch number management
 						if ($lines[$i]->entrepot_id == 0) {
 							// only show lot numbers from src warehouse when shipping from multiple warehouses
@@ -3255,9 +3078,13 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 					// add a 0 qty lot row to be able to add a lot
 					print '<tr>';
 					// Qty to ship or shipped
-					print '<td><input class="qtyl" name="qtyl'.$line_id.'_0" id="qtyl'.$line_id.'_0" type="text" size="4" value="0"></td>';
+					$readonly_edit_attr_new_batch = '';
+					if ($lines[$i]->qty_asked <= $qtyalreadysent) {
+						$readonly_edit_attr_new_batch = ' readonly="readonly"';
+					}
+					print '<td><input class="qtyl" name="qtyl'.$line_id.'_0" id="qtyl'.$line_id.'_0" type="text" size="4" value="0"'.$readonly_edit_attr_new_batch.'></td>';
 					// Batch number management
-					print '<td>'.$formproduct->selectLotStock('', 'batchl'.$line_id.'_0', '', 1, 0, $lines[$i]->fk_product).'</td>';
+					print '<td>'.$formproduct->selectLotStock('', 'batchl'.$line_id.'_0', '', 1, ($lines[$i]->qty_asked <= $qtyalreadysent ? 1 : 0), $lines[$i]->fk_product).'</td>';
 					print '</tr>';
 				} elseif (isModEnabled('stock')) {
 					if ($lines[$i]->fk_product > 0) {
@@ -3265,9 +3092,15 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 							print '<!-- case edit 2 -->';
 							print '<tr>';
 							// Qty to ship or shipped
-							print '<td><input class="qtyl right" name="qtyl'.$line_id.'" id="qtyl'.$line_id.'" type="text" size="4" value="'.$lines[$i]->qty_shipped.'">'.$unit_order.'</td>';
+							$readonly_edit_attr_stock_single_wh = '';
+							$value_edit_qty_stock_single_wh = $lines[$i]->qty_shipped;
+							if ($lines[$i]->qty_asked <= $qtyalreadysent) {
+								$readonly_edit_attr_stock_single_wh = ' readonly="readonly"';
+								$value_edit_qty_stock_single_wh = 0;
+							}
+							print '<td><input class="qtyl right" name="qtyl'.$line_id.'" id="qtyl'.$line_id.'" type="text" size="4" value="'.$value_edit_qty_stock_single_wh.'"'.$readonly_edit_attr_stock_single_wh.'>'.$unit_order.'</td>';
 							// Warehouse source
-							print '<td>'.$formproduct->selectWarehouses($lines[$i]->entrepot_id, 'entl'.$line_id, '', 1, 0, $lines[$i]->fk_product, '', 1, 0, array(), 'minwidth200').'</td>';
+							print '<td>'.$formproduct->selectWarehouses($lines[$i]->entrepot_id, 'entl'.$line_id, '', 1, ($lines[$i]->qty_asked <= $qtyalreadysent ? 1 : 0), $lines[$i]->fk_product, '', 1, 0, array(), 'minwidth200').'</td>';
 							// Batch number management
 							print '<td>';
 							if (isModEnabled('productbatch')) {
@@ -3280,9 +3113,15 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 							foreach ($lines[$i]->details_entrepot as $detail_entrepot) {
 								print '<tr>';
 								// Qty to ship or shipped
-								print '<td><input class="qtyl right" name="qtyl'.$detail_entrepot->line_id.'" id="qtyl'.$detail_entrepot->line_id.'" type="text" size="4" value="'.$detail_entrepot->qty_shipped.'">'.$unit_order.'</td>';
+									$readonly_edit_attr_stock_multi_wh = '';
+									$value_edit_qty_stock_multi_wh = $detail_entrepot->qty_shipped;
+									if ($lines[$i]->qty_asked <= $qtyalreadysent) {
+										$readonly_edit_attr_stock_multi_wh = ' readonly="readonly"';
+										$value_edit_qty_stock_multi_wh = 0;
+									}
+									print '<td><input class="qtyl right" name="qtyl'.$detail_entrepot->line_id.'" id="qtyl'.$detail_entrepot->line_id.'" type="text" size="4" value="'.$value_edit_qty_stock_multi_wh.'"'.$readonly_edit_attr_stock_multi_wh.'>'.$unit_order.'</td>';
 								// Warehouse source
-								print '<td>'.$formproduct->selectWarehouses($detail_entrepot->entrepot_id, 'entl'.$detail_entrepot->line_id, '', 1, 0, $lines[$i]->fk_product, '', 1, 0, array(), 'minwidth200').'</td>';
+									print '<td>'.$formproduct->selectWarehouses($detail_entrepot->entrepot_id, 'entl'.$detail_entrepot->line_id, '', 1, ($lines[$i]->qty_asked <= $qtyalreadysent ? 1 : 0), $lines[$i]->fk_product, '', 1, 0, array(), 'minwidth200').'</td>';
 								// Batch number management
 								print '<td>';
 								if (isModEnabled('productbatch')) {
@@ -3295,7 +3134,13 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 							print '<!-- case edit 4 -->';
 							print '<tr>';
 							// Qty to ship or shipped
-							print '<td><input class="qtyl right" name="qtyl'.$line_id.'" id="qtyl'.$line_id.'" type="text" size="4" value="'.$lines[$i]->qty_shipped.'"></td>';
+							$readonly_edit_attr_stock_service = '';
+							$value_edit_qty_stock_service = $lines[$i]->qty_shipped;
+							if ($lines[$i]->qty_asked <= $qtyalreadysent) {
+								$readonly_edit_attr_stock_service = ' readonly="readonly"';
+								$value_edit_qty_stock_service = 0;
+							}
+							print '<td><input class="qtyl right" name="qtyl'.$line_id.'" id="qtyl'.$line_id.'" type="text" size="4" value="'.$value_edit_qty_stock_service.'"'.$readonly_edit_attr_stock_service.'></td>';
 							print '<td><span class="opacitymedium">('.$langs->trans("Service").')</span></td>';
 							print '<td></td>';
 							print '</tr>';
@@ -3307,7 +3152,13 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 						print '<!-- case edit 6 -->';
 						print '<tr>';
 						// Qty to ship or shipped
-						print '<td><input class="qtyl right" name="qtyl'.$line_id.'" id="qtyl'.$line_id.'" type="text" size="4" value="'.$lines[$i]->qty_shipped.'">'.$unit_order.'</td>';
+						$readonly_edit_attr_stock_no_fkprod = '';
+						$value_edit_qty_stock_no_fkprod = $lines[$i]->qty_shipped;
+						if ($lines[$i]->qty_asked <= $qtyalreadysent) {
+							$readonly_edit_attr_stock_no_fkprod = ' readonly="readonly"';
+							$value_edit_qty_stock_no_fkprod = 0;
+						}
+						print '<td><input class="qtyl right" name="qtyl'.$line_id.'" id="qtyl'.$line_id.'" type="text" size="4" value="'.$value_edit_qty_stock_no_fkprod.'"'.$readonly_edit_attr_stock_no_fkprod.'>'.$unit_order.'</td>';
 						// Warehouse source
 						print '<td></td>';
 						// Batch number management
@@ -3318,7 +3169,13 @@ print '<input class="qtyl mo-serial-qty-input right '.$tooltipClass.'" title="'.
 					print '<!-- case edit 7 -->';
 					print '<tr>';
 					// Qty to ship or shipped
-					print '<td><input class="qtyl right" name="qtyl'.$line_id.'" id="qtyl'.$line_id.'" type="text" size="4" value="'.$lines[$i]->qty_shipped.'"></td>';
+					$readonly_edit_attr_no_stock_module = '';
+					$value_edit_qty_no_stock_module = $lines[$i]->qty_shipped;
+					if ($lines[$i]->qty_asked <= $qtyalreadysent) {
+						$readonly_edit_attr_no_stock_module = ' readonly="readonly"';
+						$value_edit_qty_no_stock_module = 0;
+					}
+					print '<td><input class="qtyl right" name="qtyl'.$line_id.'" id="qtyl'.$line_id.'" type="text" size="4" value="'.$value_edit_qty_no_stock_module.'"'.$readonly_edit_attr_no_stock_module.'></td>';
 					// Warehouse source
 					print '<td></td>';
 					// Batch number management
@@ -3627,32 +3484,28 @@ if ($user->hasRight('expedition', 'creer') && $object->status > 0) {
 }
 
 // End of page
+// Your custom JS code to enable/disable MO serial inputs and handle quantities
 print '<script type="text/javascript">
-if (typeof window.getBaseSerialNumberPart !== "function") {
-    window.getBaseSerialNumberPart = function(serial_string) {
-        if (typeof serial_string !== "string") return "";
-        let hyphen_count = 0;
-        let cut_off_position = serial_string.length;
-        for (let i = 0; i < serial_string.length; i++) {
-            if (serial_string[i] === "-") {
-                hyphen_count++;
-                if (hyphen_count === 3) {
-                    cut_off_position = i;
-                    break;
-                }
-            }
-        }
-        return serial_string.substring(0, cut_off_position);
-    };
-}
-
 $(document).ready(function() {
     if (typeof window.getBaseSerialNumberPart !== "function") {
-        console.error("getBaseSerialNumberPart not defined.");
-        return;
+        window.getBaseSerialNumberPart = function(serial_string) {
+            if (typeof serial_string !== "string") return "";
+            let hyphen_count = 0;
+            let cut_off_position = serial_string.length;
+            for (let i = 0; i < serial_string.length; i++) {
+                if (serial_string[i] === "-") {
+                    hyphen_count++;
+                    if (hyphen_count === 3) {
+                        cut_off_position = i;
+                        break;
+                    }
+                }
+            }
+            return serial_string.substring(0, cut_off_position);
+        };
     }
 
-    $("select.mo-product31-serial-select").each(function() {
+    $("select.mo-product483-serial-select").each(function() {
         var $selectField = $(this);
         var baseMoRef = $selectField.data("basemoref");
         if (!baseMoRef) return;
@@ -3668,7 +3521,10 @@ $(document).ready(function() {
 
             var actualSerial = "";
             var match = serialText.match(/^([^\s(]+)/);
-            if (match && match[1]) actualSerial = match[1];
+            if (match && match[1]) {
+                actualSerial = match[1];
+            }
+
             if (actualSerial === "") return;
 
             var baseSerialPart = window.getBaseSerialNumberPart(actualSerial);
@@ -3699,7 +3555,8 @@ $(document).ready(function() {
 
         if (typeof baseMoRef === "string" && baseMoRef !== "") {
             if (typeof fullSerial !== "string" || fullSerial === "") {
-                $qtyInput.prop("disabled", true).val("");
+                $qtyInput.prop("disabled", true);
+                $qtyInput.val("");
                 return;
             }
 
@@ -3720,68 +3577,47 @@ $(document).ready(function() {
             if (isValid) {
                 $qtyInput.prop("disabled", false);
             } else {
-                $qtyInput.prop("disabled", true).val("");
+                $qtyInput.prop("disabled", true);
+                $qtyInput.val("");
             }
+
         } else {
             $qtyInput.prop("disabled", false);
         }
     });
 
-    var lotEntryIndex = {};
+    // Enforce readonly + zero on fully shipped lines
+    $("input[name^=\'qtyasked\']").each(function() {
+        var $qtyAskedInput = $(this);
+        var nameAttr = $qtyAskedInput.attr("name");
+        var indexMatch = nameAttr.match(/qtyasked(\\d+)/);
 
-    $("body").on("click", ".buttonaddlot", function() {
-        var lineIndex = $(this).data("line-index");
-        if (typeof lotEntryIndex[lineIndex] === "undefined") {
-            lotEntryIndex[lineIndex] = 1;
+        if (indexMatch && indexMatch[1]) {
+            var index = indexMatch[1];
+            var qtyAsked = parseFloat($qtyAskedInput.val());
+            var $qtyDeliveredInput = $("input[name=\'qtydelivered" + index + "\']");
+            var qtyDelivered = 0;
+
+            if ($qtyDeliveredInput.length) {
+                qtyDelivered = parseFloat($qtyDeliveredInput.val());
+            }
+
+            if (!isNaN(qtyAsked) && !isNaN(qtyDelivered) && qtyAsked <= qtyDelivered) {
+                var $simpleQtyInput = $("input[name=\'qtyl" + index + "\']");
+                if ($simpleQtyInput.length) {
+                    $simpleQtyInput.val(0).prop("readonly", true);
+                }
+
+                $("input[name^=\'qtyl" + index + "_\']").each(function() {
+                    $(this).val(0).prop("readonly", true);
+                });
+            }
         }
-        var newIndex = lotEntryIndex[lineIndex]++;
-
-        var lotEntryHtml = \'<div class="lot_entry_row">\';
-        lotEntryHtml += \'<input type="text" name="lots[\' + lineIndex + \'][\' + newIndex + \'][number]" class="minwidth150" placeholder="' . dol_escape_js($langs->trans("EnterLotNumber")) . '"> \';
-        lotEntryHtml += \'' . dol_escape_js($langs->trans("Qty")) . ': <input type="text" name="lots[\' + lineIndex + \'][\' + newIndex + \'][qty]" size="4" class="lot_qty_input" data-line-index="\' + lineIndex + \'"> \';
-
-        ' . (isModEnabled("stock") ? '
-        var $firstWarehouseSelect = $("#lot_entries_line_" + lineIndex + " .lot_entry_row:first .lot_warehouse_input");
-        if ($firstWarehouseSelect.length) {
-            var clonedSelect = $firstWarehouseSelect.clone().attr("name", "lots[" + lineIndex + "][" + newIndex + "][warehouse]").val("");
-            lotEntryHtml += $("<div>").append(clonedSelect).html();
-        } else {
-            lotEntryHtml += \'<input type="text" name="lots[\' + lineIndex + \'][\' + newIndex + \'][warehouse_name_fallback]" placeholder="' . dol_escape_js($langs->trans("Warehouse")) . ' (ID)">\';
-        }
-        ' : '') . '
-
-        lotEntryHtml += \'<button type="button" class="buttonremovelot">-</button>\';
-        lotEntryHtml += \'</div>\';
-
-        $("#lot_entries_line_" + lineIndex).append(lotEntryHtml);
-        $("#lot_entries_line_" + lineIndex + " .lot_entry_row:last .lot_warehouse_input").select2();
-    });
-
-    $("body").on("click", ".buttonremovelot", function() {
-        $(this).closest(".lot_entry_row").remove();
-        var lineIndex = $(this).closest(".lot_entry_row").find(".lot_qty_input").data("line-index");
-        if (typeof lineIndex !== "undefined") {
-            var totalLotQty = 0;
-            $("#lot_entries_line_" + lineIndex + " .lot_qty_input").each(function() {
-                var qty = parseFloat($(this).val());
-                if (!isNaN(qty)) totalLotQty += qty;
-            });
-            $("#qtyl" + lineIndex).val(totalLotQty.toFixed(' . (empty($conf->global->MAIN_MAX_DECIMALS_TOT) ? 2 : (int) $conf->global->MAIN_MAX_DECIMALS_TOT) . '));
-        }
-    });
-
-    $("body").on("input", ".lot_qty_input", function() {
-        var lineIndex = $(this).data("line-index");
-        var totalLotQty = 0;
-        $("#lot_entries_line_" + lineIndex + " .lot_qty_input").each(function() {
-            var qty = parseFloat($(this).val());
-            if (!isNaN(qty)) totalLotQty += qty;
-        });
-        $("#qtyl" + lineIndex).val(totalLotQty.toFixed(' . (empty($conf->global->MAIN_MAX_DECIMALS_TOT) ? 2 : (int) $conf->global->MAIN_MAX_DECIMALS_TOT) . '));
     });
 });
 </script>';
 
 llxFooter();
 $db->close();
+
 
