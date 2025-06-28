@@ -188,6 +188,8 @@ public function write_file($object, $outputlangs, $srctemplatepath = '', $hidede
 {
     global $user, $langs, $conf, $mysoc, $db, $hookmanager, $nblines;
 
+    $this->sum_calculated_totalht = 0.0; // Initialize sum for grand total
+
     dol_syslog("write_file outputlangs->defaultlang=" . (is_object($outputlangs) ? $outputlangs->defaultlang : 'null'));
 
     if (!is_object($outputlangs)) {
@@ -562,6 +564,53 @@ if (is_readable($stamp_path)) {
                 $linePosition = $i + 1;
                 $curY = $nexY;
 
+                // --- BEGIN: Fetch prices from linked order line for shipment context ---
+                // This assumes $object is an Expedition object, and lines need prices from origin order.
+                // If $object is already a Facture or Commande, this fetching might be redundant for its own prices
+                // but necessary if this PDF is meant to show order prices on a garantie doc for a shipped item.
+                $unitprice_for_calc = 0;
+                $line_total_ht_for_calc = 0;
+                $line_vat_rate_for_calc = 0;
+                $line_qty_for_calc = $object->lines[$i]->qty; // Default to expedition line QTY (shipped qty)
+
+                if (!empty($object->lines[$i]->fk_elementdet) && $object->lines[$i]->fk_elementdet > 0) {
+                    if (!class_exists('CommandeDet')) { // Ensure class is available
+                        require_once DOL_DOCUMENT_ROOT . '/commande/class/commandedet.class.php';
+                    }
+                    $order_line = new CommandeDet($this->db);
+                    if ($order_line->fetch($object->lines[$i]->fk_elementdet) > 0) {
+                        $unitprice_for_calc = $order_line->subprice;
+                        // $line_qty_for_calc is already $object->lines[$i]->qty (shipped qty)
+                        $line_total_ht_for_calc = $unitprice_for_calc * $line_qty_for_calc;
+                        $line_vat_rate_for_calc = $order_line->tva_tx;
+
+                        // Store these potentially shipment-specific values on the line object
+                        // for access by printStdColumnContent or similar, and for VAT calculation.
+                        $object->lines[$i]->fetched_unitprice = $unitprice_for_calc;
+                        $object->lines[$i]->calculated_totalht = $line_total_ht_for_calc;
+                        $object->lines[$i]->fetched_vatrate = $line_vat_rate_for_calc;
+                        // Also store the original order line's total_tva and tva_tx if needed for reference or complex tax rules
+                        $object->lines[$i]->order_line_total_tva = $order_line->total_tva; // VAT amount from order line
+                        $object->lines[$i]->order_line_tva_tx = $order_line->tva_tx;     // VAT rate from order line
+
+                    } else {
+                        dol_syslog(get_class($this).": Could not fetch order line with id: " . $object->lines[$i]->fk_elementdet, LOG_WARNING);
+                        $object->lines[$i]->fetched_unitprice = 0; // Fallback
+                        $object->lines[$i]->calculated_totalht = 0; // Fallback
+                        $object->lines[$i]->fetched_vatrate = 0;    // Fallback
+                    }
+                } else {
+                    // Fallback if no fk_elementdet: try to use existing line values if $object is not an expedition
+                    // but an invoice/order. For expedition, these would be 0.
+                    $object->lines[$i]->fetched_unitprice = isset($object->lines[$i]->subprice) ? $object->lines[$i]->subprice : 0;
+                    $object->lines[$i]->calculated_totalht = isset($object->lines[$i]->total_ht) ? $object->lines[$i]->total_ht : 0;
+                    $object->lines[$i]->fetched_vatrate = isset($object->lines[$i]->tva_tx) ? $object->lines[$i]->tva_tx : 0;
+                    if (empty($object->lines[$i]->fk_elementdet)) {
+                        dol_syslog(get_class($this).": fk_elementdet not found for line " . $i . ". Using line's own prices if available.", LOG_DEBUG);
+                    }
+                }
+                // --- END: Fetch prices ---
+
                 if (isset($object->lines[$i]->pagebreak) && $object->lines[$i]->pagebreak) {
                     $pdf->AddPage();
                     if (!empty($tplidx)) {
@@ -700,7 +749,8 @@ if (is_readable($stamp_path)) {
                 }
 
                 if ($this->getColumnStatus('subprice')) {
-                    $up_excl_tax = pdf_getlineupexcltax($object, $i, $outputlangs, $hidedetails);
+                    // Use the fetched unit price
+                    $up_excl_tax = price(isset($object->lines[$i]->fetched_unitprice) ? $object->lines[$i]->fetched_unitprice : 0, 0, $outputlangs);
                     $this->printStdColumnContent($pdf, $curY, 'subprice', $up_excl_tax);
                 }
 
@@ -815,7 +865,8 @@ if (is_readable($stamp_path)) {
                 }
 
                 if ($this->getColumnStatus('totalexcltax')) {
-                    $total_excl_tax = pdf_getlinetotalexcltax($object, $i, $outputlangs, $hidedetails);
+                    // Use the calculated line total HT (based on shipped qty * fetched unit price)
+                    $total_excl_tax = price(isset($object->lines[$i]->calculated_totalht) ? $object->lines[$i]->calculated_totalht : 0, 0, $outputlangs);
                     $this->printStdColumnContent($pdf, $curY, 'totalexcltax', $total_excl_tax);
                 }
 
@@ -934,20 +985,31 @@ if (is_readable($stamp_path)) {
                 );
                 $reshook = $hookmanager->executeHooks('printPDFline', $parameters, $this);
 
-                if (isModEnabled("multicurrency") && $object->multicurrency_tx != 1) {
-                    $tvaligne = $object->lines[$i]->multicurrency_total_tva;
-                } else {
-                    $tvaligne = $object->lines[$i]->total_tva;
+                // Accumulate sum of calculated line totals HT
+                if (isset($object->lines[$i]->calculated_totalht) && is_numeric($object->lines[$i]->calculated_totalht)) {
+                    $this->sum_calculated_totalht += $object->lines[$i]->calculated_totalht;
                 }
 
+                // VAT calculation based on calculated_totalht and fetched_vatrate
+                $base_ht_for_vat = isset($object->lines[$i]->calculated_totalht) ? $object->lines[$i]->calculated_totalht : 0;
+                $vat_rate_for_line = isset($object->lines[$i]->fetched_vatrate) ? $object->lines[$i]->fetched_vatrate : 0;
+
+                $tvaligne = 0;
+                if (is_numeric($base_ht_for_vat) && is_numeric($vat_rate_for_line)) {
+                    $tvaligne = $base_ht_for_vat * ($vat_rate_for_line / 100);
+                }
+
+                // TODO: Local tax recalculation would be needed here if they are based on line HT.
+                // For now, using original values as a placeholder, assuming they might be 0 or handled differently.
+                // This part might need significant review if local taxes are used and should be recalculated.
                 $localtax1ligne = $object->lines[$i]->total_localtax1;
                 $localtax2ligne = $object->lines[$i]->total_localtax2;
-                $localtax1_rate = $object->lines[$i]->localtax1_tx;
-                $localtax2_rate = $object->lines[$i]->localtax2_tx;
+                $localtax1_rate = $object->lines[$i]->localtax1_tx; // These rates should ideally also be from order_line if fetched
+                $localtax2_rate = $object->lines[$i]->localtax2_tx; // These rates should ideally also be from order_line if fetched
                 $localtax1_type = $object->lines[$i]->localtax1_type;
                 $localtax2_type = $object->lines[$i]->localtax2_type;
 
-                $vatrate = (string) $object->lines[$i]->tva_tx;
+                $vatrate = (string) $vat_rate_for_line; // Use the fetched/corrected VAT rate string for keys
 
                 if ((!isset($localtax1_type) || $localtax1_type == '' || !isset($localtax2_type) || $localtax2_type == '') && (!empty($localtax1_rate) || !empty($localtax2_rate))) {
                     $localtaxtmp_array = getLocalTaxesFromRate($vatrate, 0, $object->thirdparty, $mysoc);
@@ -1386,14 +1448,45 @@ if (is_readable($stamp_path)) {
 		$pdf->SetFillColor(255, 255, 255);
 		$pdf->SetXY($col1x, $tab2_top + $tab2_hl * $index);
 		$pdf->MultiCell($col2x - $col1x, $tab2_hl, $outputlangs->transnoentities("TotalHT").(is_object($outputlangsbis) ? ' / '.$outputlangsbis->transnoentities("TotalHT") : ''), 0, 'L', 1);
-		$total_ht = ((isModEnabled("multicurrency") && isset($object->multicurrency_tx) && $object->multicurrency_tx != 1) ? $object->multicurrency_total_ht : $object->total_ht);
+
+		// Use the sum of calculated line totals.
+		// Global discount handling: $object->remise_absolue_htc / $object->remise_percent might apply.
+		// The original $object->total_ht would have included these.
+		// For now, displaying the sum of lines before potential global discount.
+		// If a global discount needs to be shown and subtracted, that logic would go here.
+		$total_ht_to_display = $this->sum_calculated_totalht;
+		// Example: if ($object->remise_absolue_htc > 0) $total_ht_to_display -= $object->remise_absolue_htc;
+		// The original code added $object->remise to $object->total_ht, which is unusual.
+		// We will display the sum of lines, assuming it's the net amount before VAT.
+
 		$pdf->SetXY($col2x, $tab2_top + $tab2_hl * $index);
-		$pdf->MultiCell($largcol2, $tab2_hl, price($total_ht + (!empty($object->remise) ? $object->remise : 0), 0, $outputlangs), 0, 'R', 1);
+		$pdf->MultiCell($largcol2, $tab2_hl, price($total_ht_to_display, 0, $outputlangs), 0, 'R', 1);
 
 		// Show VAT by rates and total
 		$pdf->SetFillColor(248, 248, 248);
 
-		$total_ttc = (isModEnabled("multicurrency") && $object->multicurrency_tx != 1) ? $object->multicurrency_total_ttc : $object->total_ttc;
+		// Recalculate Total TTC based on the new Total HT and the recalculated $this->tva_array
+		$total_vat_recalculated = 0;
+		foreach ($this->tva_array as $vat_details) {
+			$total_vat_recalculated += $vat_details['amount'];
+		}
+		// TODO: Add recalculated local taxes here if they are modified from their original $object->lines values
+		$total_localtax1_recalculated = 0;
+        foreach ($this->localtax1 as $localtax_type_arr) {
+            foreach ($localtax_type_arr as $localtax_amount) {
+                $total_localtax1_recalculated += $localtax_amount;
+            }
+        }
+        $total_localtax2_recalculated = 0;
+        foreach ($this->localtax2 as $localtax_type_arr) {
+            foreach ($localtax_type_arr as $localtax_amount) {
+                $total_localtax2_recalculated += $localtax_amount;
+            }
+        }
+		$total_ttc = $total_ht_to_display + $total_vat_recalculated + $total_localtax1_recalculated + $total_localtax2_recalculated;
+		// Apply global discount to TTC if it was a % discount on HT, or if it's a fixed TTC discount
+		// This part needs to align with how global discounts are handled by $object->total_ttc
+		// For now, this $total_ttc is based on our calculated sum_ht and recalculated vat/localtax.
 
 		$this->atleastoneratenotnull = 0;
 		if (!getDolGlobalString('MAIN_GENERATE_DOCUMENTS_WITHOUT_VAT')) {
@@ -2281,34 +2374,13 @@ $this->cols['desc'] = array(
     //     $this->cols['vat']['status'] = true; // Keep this commented to ensure it's always off
     // }
 
-    $rank += 10;
-    $this->cols['subprice'] = array(
-        'rank' => $rank,
-        'width' => 19,
-        'status' => true,
-        'title' => array(
-            'textkey' => 'PriceUHT'
-        ),
-        'content' => array(
-            'align' => 'C',
-        ),
-        'border-left' => true,
-    );
+    // Order: Desc, Qty, Unit Price HT, Total HT, then others
+    // $rank is at 5 after 'desc'
 
-    $tmpwidth = 0;
-    $nblines = count($object->lines);
-    for ($i = 0; $i < $nblines; $i++) {
-        $tmpwidth2 = dol_strlen(dol_string_nohtmltag(pdf_getlineupexcltax($object, $i, $outputlangs, $hidedetails)));
-        $tmpwidth = max($tmpwidth, $tmpwidth2);
-    }
-    if ($tmpwidth > 10) {
-        $this->cols['subprice']['width'] += (2 * ($tmpwidth - 10));
-    }
-
-    $rank += 10;
-  $this->cols['qty'] = array(
+    $rank = 10; // Next available rank after 'desc' (rank 5)
+    $this->cols['qty'] = array(
         'rank' => $rank,
-        'width' => 16,
+        'width' => 16, // Original width
         'status' => true,
         'title' => array(
             'textkey' => 'Qty'
@@ -2319,92 +2391,123 @@ $this->cols['desc'] = array(
         'border-left' => true,
     );
 
-    // Add Serial Number Column
-    $rank += 10;
-    $this->cols['serialnumber'] = array(
+    $rank += 10; // New rank for subprice: 20
+    $this->cols['subprice'] = array(
         'rank' => $rank,
-        'width' => 30, // Increased width to 30mm
-        'status' => false, // default to false, will be set based on data
+        'width' => 19, // Original width, dynamically adjusted later
+        'status' => true, // Ensure it's true
         'title' => array(
-            'textkey' => 'LotSerial', // Use Dolibarr translation key
+            'textkey' => 'PriceUHT'
         ),
         'content' => array(
-            'align' => 'L',
-            'padding' => array(1, 0.5, 1, 0.5),
+            'align' => 'R', // Typically prices are right-aligned
         ),
         'border-left' => true,
     );
-
-
- // Add Garantie Column
-    $rank += 10;
-    $this->cols['garantie'] = array(
-        'rank' => $rank,
-        'width' => 15, // in mm, adjust as needed
-        'status' => false, // default to false, will be set based on data
-        'title' => array(
-            'textkey' => 'Warranty', // Use Dolibarr translation key or custom key
-        ),
-        'content' => array(
-            'align' => 'L',
-            'padding' => array(1, 0.5, 1, 0.5),
-        ),
-        'border-left' => true,
-    );
-
-
-    $rank += 10;
-    $this->cols['unit'] = array(
-        'rank' => $rank,
-        'width' => 11,
-        'status' => false,
-        'title' => array(
-            'textkey' => 'Unit'
-        ),
-        'border-left' => true,
-    );
-    if (getDolGlobalInt('PRODUCT_USE_UNITS')) {
-        $this->cols['unit']['status'] = true;
+    // Dynamic width adjustment for subprice (original logic)
+    $tmpwidth_subprice = 0;
+    if (!empty($object->lines)) { // Check if lines exist to avoid error on count()
+        $nblines_subprice = count($object->lines);
+        for ($i_subprice = 0; $i_subprice < $nblines_subprice; $i_subprice++) {
+            $tmpwidth2_subprice = dol_strlen(dol_string_nohtmltag(pdf_getlineupexcltax($object, $i_subprice, $outputlangs, $hidedetails)));
+            $tmpwidth_subprice = max($tmpwidth_subprice, $tmpwidth2_subprice);
+        }
+        if ($tmpwidth_subprice > 10) {
+            $this->cols['subprice']['width'] += (2 * ($tmpwidth_subprice - 10));
+        }
     }
 
-    $rank += 10;
-    $this->cols['discount'] = array(
+    $rank += 10; // New rank for totalexcltax: 30
+    $this->cols['totalexcltax'] = array(
         'rank' => $rank,
-        'width' => 13,
-        'status' => false,
-        'title' => array(
-            'textkey' => 'ReductionShort'
-        ),
-        'border-left' => true,
-    );
-    if ($this->atleastonediscount) {
-        $this->cols['discount']['status'] = true;
-    }
-
-    $rank += 1000;
- $this->cols['totalexcltax'] = array(
-        'rank' => $rank,
-        'width' => 26,
-        'status' => !getDolGlobalString('PDF_ORDER_HIDE_PRICE_EXCL_TAX'),
+        'width' => 26, // Original width
+        'status' => true, // Ensure it's true
         'title' => array(
             'textkey' => 'TotalHTShort'
         ),
         'content' => array(
-            'align' => 'C',
+            'align' => 'R', // Typically prices are right-aligned
         ),
         'border-left' => true,
     );
 
-    $rank += 1010;
+    // Other columns - their ranks need to follow and not overlap
+    // Let's assign ranks sequentially from here for remaining optional columns
+    $rank += 10; // rank is now 40
+    $this->cols['serialnumber'] = array(
+        'rank' => $rank,
+        'width' => 30,
+        'status' => false, // Keep original status, will be set if data exists
+        'title' => array('textkey' => 'LotSerial'),
+        'content' => array('align' => 'L', 'padding' => array(1, 0.5, 1, 0.5)),
+        'border-left' => true,
+    );
+
+    $rank += 10; // rank is now 50
+    $this->cols['garantie'] = array(
+        'rank' => $rank,
+        'width' => 15,
+        'status' => false, // Keep original status
+        'title' => array('textkey' => 'Warranty'),
+        'content' => array('align' => 'L', 'padding' => array(1, 0.5, 1, 0.5)),
+        'border-left' => true,
+    );
+
+    $rank += 10; // rank is now 60
+    $this->cols['unit'] = array(
+        'rank' => $rank,
+        'width' => 11,
+        'status' => getDolGlobalInt('PRODUCT_USE_UNITS') ? true : false,
+        'title' => array('textkey' => 'Unit'),
+        'border-left' => true,
+    );
+
+    $rank += 10; // rank is now 70
+    $this->cols['discount'] = array(
+        'rank' => $rank,
+        'width' => 13,
+        'status' => $this->atleastonediscount ? true : false,
+        'title' => array('textkey' => 'ReductionShort'),
+        'border-left' => true,
+    );
+
+    // VAT and TotalInclTax are usually far right if shown
+    // $this->cols['vat'] was originally rank 25 and status false. Let's keep it there but ensure rank is distinct.
+    // Since other columns are now occupying ranks up to 70, we can place VAT after.
+    // Or, if VAT column is truly not desired, we can skip redefining it.
+    // For safety, let's redefine it with a new rank if it's meant to be potentially active.
+    // The original code had 'vat' before 'subprice'. If it's to be kept that way and potentially active:
+    // This re-ranking makes 'vat' later. If it must be before price columns, its rank needs to be < 20.
+    // Given its status was false, moving it later is fine.
+
+    $rank += 10; // rank is now 80
+    $this->cols['vat'] = array( // Re-asserting VAT column with a new rank
+        'rank' => $rank,
+        'status' => false, // Original: false, keep it so unless explicitly asked to enable
+        'width' => 16,
+        'title' => array('textkey' => 'VAT'),
+        'border-left' => true,
+    );
+    // Original VAT status logic:
+    // if (!getDolGlobalInt('MAIN_GENERATE_DOCUMENTS_WITHOUT_VAT') && !getDolGlobalString('MAIN_GENERATE_DOCUMENTS_WITHOUT_VAT_COLUMN')) {
+    //     $this->cols['vat']['status'] = true;
+    // }
+
+
+    $rank += 10; // rank is now 90
     $this->cols['totalincltax'] = array(
         'rank' => $rank,
         'width' => 26,
-        'status' => getDolGlobalBool('PDF_ORDER_SHOW_PRICE_INCL_TAX'),
-        'title' => array(
-            'textkey' => 'TotalTTCShort'
-        ),
+        'status' => getDolGlobalBool('PDF_ORDER_SHOW_PRICE_INCL_TAX'), // Keep original status logic
+        'title' => array('textkey' => 'TotalTTCShort'),
         'border-left' => true,
     );
+    // Note: 'position' column was rank 0. 'photo' was rank 15. These are not touched by this specific diff block.
+    // Ensure their ranks are not clashing with the new ranks (10, 20, 30, 40, 50, 60, 70, 80, 90).
+    // Position (0) and Photo (original rank 15, after 'desc' which is 5) are fine.
+    // Original ranks: position (0), desc (5), photo (15), vat (25), subprice (35), qty (45), serial(55), garantie(65), unit(75), discount(85), totalexcltax(1000), totalincltax(1010)
+    // New ranks: desc(5), qty(10), subprice(20), totalexcltax(30), serial(40), garantie(50), unit(60), discount(70), vat(80), totalincltax(90)
+    // This re-ranking should be applied consistently. The provided SEARCH block is specific.
 
     // Add extrafields cols
     if (!empty($object->lines)) {
