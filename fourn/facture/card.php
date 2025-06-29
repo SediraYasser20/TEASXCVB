@@ -37,6 +37,18 @@
 
 // Load Dolibarr environment
 require '../../main.inc.php';
+
+// Check if user is in group 9 directly (global for action handling)
+$user_is_in_group_9_card = false; // Use a distinct name to avoid conflict if already defined in a more local scope
+$sql_group_check_card_global = "SELECT COUNT(*) as count FROM ".MAIN_DB_PREFIX."usergroup_user WHERE fk_user = ".$user->id." AND fk_usergroup = 9";
+$resql_group_check_card_global = $db->query($sql_group_check_card_global);
+if ($resql_group_check_card_global) {
+	$obj_group_check_card_global = $db->fetch_object($resql_group_check_card_global);
+	if ($obj_group_check_card_global && $obj_group_check_card_global->count > 0) {
+		$user_is_in_group_9_card = true;
+	}
+	$db->free($resql_group_check_card_global);
+}
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formfile.class.php';
 require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/modules/supplier_invoice/modules_facturefournisseur.php';
@@ -352,13 +364,13 @@ if (empty($reshook)) {
 		$discount = new DiscountAbsolute($db);
 		$result = $discount->fetch(GETPOSTINT("discountid"));
 		$discount->unlink_invoice();
-	} elseif ($action == 'confirm_paid' && $confirm == 'yes' && $usercancreate) {
+	} elseif ($action == 'confirm_paid' && $confirm == 'yes' && ($usercancreate || $user_is_in_group_9_card)) {
 		$object->fetch($id);
 		$result = $object->setPaid($user);
 		if ($result < 0) {
 			setEventMessages($object->error, $object->errors, 'errors');
 		}
-	} elseif ($action == 'confirm_paid_partially' && $confirm == 'yes' && $usercancreate) {
+	} elseif ($action == 'confirm_paid_partially' && $confirm == 'yes' && ($usercancreate || $user_is_in_group_9_card)) {
 		// Classif "paid partially"
 		$object->fetch($id);
 		$close_code = GETPOST("close_code", 'restricthtml');
@@ -371,7 +383,7 @@ if (empty($reshook)) {
 		} else {
 			setEventMessages($langs->trans("ErrorFieldRequired", $langs->transnoentitiesnoconv("Reason")), null, 'errors');
 		}
-	} elseif ($action == 'confirm_canceled' && $confirm == 'yes' && $usercancreate) {
+	} elseif ($action == 'confirm_canceled' && $confirm == 'yes' && ($usercancreate || $user_is_in_group_9_card)) {
 		// Classify "abandoned"
 		$object->fetch($id);
 		$close_code = GETPOST("close_code", 'restricthtml');
@@ -4056,7 +4068,7 @@ if ($action == 'create') {
 					|| ($object->type == FactureFournisseur::TYPE_CREDIT_NOTE && empty($discount->id))
 					|| ($object->type == FactureFournisseur::TYPE_DEPOSIT && empty($discount->id)))
 					&& ($object->status == FactureFournisseur::STATUS_CLOSED || $object->status == FactureFournisseur::STATUS_ABANDONED)) {				// A paid invoice (partially or completely)
-					if (!$objectidnext && $object->close_code != 'replaced' && $usercancreate) {	// Not replaced by another invoice
+					if (!$objectidnext && $object->close_code != 'replaced' && $usercancreate && ($user->admin || !$object->paid)) {	// Not replaced by another invoice
 						print '<a class="butAction'.($conf->use_javascript_ajax ? ' reposition' : '').'" href="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans('ReOpen').'</a>';
 					} else {
 						if ($usercancreate) {
@@ -4094,7 +4106,13 @@ if ($action == 'create') {
 				}
 
 				// Create payment
-				if ($object->type != FactureFournisseur::TYPE_CREDIT_NOTE && $object->status == FactureFournisseur::STATUS_VALIDATED && $object->paid == 0) {
+				// $user_is_in_group_9_card is now globally available, use it directly.
+				// The local $user_is_in_group_9 definition here is now redundant if the global one is used.
+				// For safety and clarity, let's ensure we use the global one.
+				// Note: The original local definition block for $user_is_in_group_9 is removed by this diff block not repeating it.
+				// This means the following 'if' condition will use the globally defined $user_is_in_group_9_card.
+
+				if ($object->type != FactureFournisseur::TYPE_CREDIT_NOTE && $object->status == FactureFournisseur::STATUS_VALIDATED && $object->paid == 0 && ($user->admin || $user_is_in_group_9_card)) {
 					print '<a class="butAction'.($conf->use_javascript_ajax ? ' reposition' : '').'" href="'.DOL_URL_ROOT.'/fourn/facture/paiement.php?facid='.$object->id.'&action=create'.($object->fk_account > 0 ? '&amp;accountid='.$object->fk_account : '').'">'.$langs->trans('DoPayment').'</a>'; // must use facid because id is for payment id not invoice
 				}
 
@@ -4137,11 +4155,11 @@ if ($action == 'create') {
 
 				// Classify 'closed not completely paid' (possible if validated and not yet filed paid)
 				if ($object->status == FactureFournisseur::STATUS_VALIDATED && $object->paid == 0 && $resteapayer > 0 && (!getDolGlobalString('SUPPLIER_INVOICE_CAN_SET_PAID_EVEN_IF_PARTIALLY_PAID') || $object->total_ttc != $resteapayer)) {
-					if ($totalpaid > 0 || $totalcreditnotes > 0) {
+					if (($totalpaid > 0 || $totalcreditnotes > 0) && $user->admin) {
 						// If one payment or one credit note was linked to this invoice
 						print '<a class="butAction'.($conf->use_javascript_ajax ? ' reposition' : '').'" href="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'&action=paid&token='.newToken().'">'.$langs->trans('ClassifyPaidPartially').'</a>';
 					} else {
-						if (!getDolGlobalString('INVOICE_CAN_NEVER_BE_CANCELED')) {
+						if (!getDolGlobalString('INVOICE_CAN_NEVER_BE_CANCELED') && $user->admin) {
 							print '<a class="butAction'.($conf->use_javascript_ajax ? ' reposition' : '').'" href="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'&action=canceled">'.$langs->trans('ClassifyCanceled').'</a>';
 						}
 					}
@@ -4255,3 +4273,4 @@ if ($action == 'create') {
 // End of page
 llxFooter();
 $db->close();
+

@@ -7,6 +7,7 @@ class savorders
     // SAV Status
     const RECIEVED_CUSTOMER = 1;
     const DELIVERED_CUSTOMER = 2;
+    const REIMBURSED = 3;
 
     const DELIVERED_SUPPLIER = 1;
     const RECEIVED_SUPPLIER = 2;
@@ -103,6 +104,20 @@ class savorders
 
         // SAV History
         $result = $extrafields->addExtraField('savorders_history', $langs->trans('savorders_history'), "text", $position++, '', 'commande_fournisseur',  0, 0, '', '', 0, '', $list);
+        
+        // --------------------------------------------------------- Commandes Clients – Invoice for SAV reimbursement
+$param = serialize(['options'=>[]]);  // we’ll populate via UI
+$extrafields->addExtraField(
+    'facture_sav',
+    $langs->trans('InvoiceForReimbursement'), // add in your lang file
+    'select',
+    $position++,
+    '',
+    'commande',
+    0, 0, '', 
+    $param,
+    0, '', $list
+);
 
         return 1;
     }

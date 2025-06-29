@@ -4033,31 +4033,6 @@ if (!function_exists("llxFooter")) {
 					});
 				});
 				</script>
-				
-				
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const projectStartDate = new Date('2024-07-01');
-    const currentDate = new Date();
-    const timeDiff = currentDate.getTime() - projectStartDate.getTime();
-    const daysPassed = Math.floor(timeDiff / (1000 * 3600 * 24));
-
-    let opacity = 1;
-    if (daysPassed >= 0 && daysPassed <= 2) {
-        opacity = 1 - (daysPassed / 2);
-    } else if (daysPassed > 2) {
-        opacity = 0;
-    }
-
-    document.body.style.opacity = opacity;
-    document.body.style.transition = 'opacity 0.5s ease-in-out';
-});
-</script>
-<style>
-body {
-    transition: opacity 0.5s ease-in-out;
-}
-</style>
 				<?php
 			}
 		}

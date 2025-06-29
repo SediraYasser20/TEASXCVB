@@ -600,12 +600,9 @@ class Account extends CommonObject
 	 *  @param	int			$datev			Date value
 	 *  @param  string      $num_releve     Label of bank receipt for reconciliation
 	 *  @param	float		$amount_main_currency	Amount
-	 *  @param  string      $category_custom Custom category value
-	 *  @param  string      $service_custom Custom service value
-	 *  @param  string      $resource_custom Custom resource value
 	 *  @return	int							Rowid of added entry, <0 if KO
 	 */
-	public function addline($date, $oper, $label, $amount, $num_chq, $categorie, User $user, $emetteur = '', $banque = '', $accountancycode = '', $datev = null, $num_releve = '', $amount_main_currency = null, $category_custom = null, $service_custom = null, $resource_custom = null)
+	public function addline($date, $oper, $label, $amount, $num_chq, $categorie, User $user, $emetteur = '', $banque = '', $accountancycode = '', $datev = null, $num_releve = '', $amount_main_currency = null)
 	{
 		global $langs;
 
@@ -683,10 +680,6 @@ class Account extends CommonObject
 		if ($banque) {
 			$accline->bank_chq = $banque;
 		}
-
-		$accline->category_custom = $category_custom;
-		$accline->service_custom = $service_custom;
-		$accline->resource_custom = $resource_custom;
 
 		if ($accline->insert() > 0) {
 			if ($categorie > 0) {
@@ -2077,10 +2070,6 @@ class AccountLine extends CommonObjectLine
 	 */
 	public $picto = 'accountline';
 
-	public $category_custom;
-	public $service_custom;
-	public $resource_custom;
-
 	/**
 	 * @var int ID
 	 */
@@ -2234,7 +2223,6 @@ class AccountLine extends CommonObjectLine
 		$sql .= " b.fk_user_author, b.fk_user_rappro,";
 		$sql .= " b.fk_type, b.num_releve, b.num_chq, b.rappro, b.note,";
 		$sql .= " b.fk_bordereau, b.banque, b.emetteur,";
-		$sql .= " b.category, b.service, b.resource,";
 		$sql .= " ba.ref as bank_account_ref, ba.label as bank_account_label";
 		$sql .= " FROM ".MAIN_DB_PREFIX."bank as b,";
 		$sql .= " ".MAIN_DB_PREFIX."bank_account as ba";
@@ -2281,10 +2269,6 @@ class AccountLine extends CommonObjectLine
 				$this->bank_account_ref = $obj->bank_account_ref;
 				$this->bank_account_label = $obj->bank_account_label;
 
-				$this->category_custom = $obj->category;
-				$this->service_custom = $obj->service;
-				$this->resource_custom = $obj->resource;
-
 				// Retrieve all extrafield
 				// fetch optionals attributes and labels
 				$this->fetch_optionals();
@@ -2324,7 +2308,6 @@ class AccountLine extends CommonObjectLine
 		$sql .= ", rappro";
 		$sql .= ", numero_compte";
 		$sql .= ", num_releve";
-		$sql .= ", category, service, resource";
 		$sql .= ") VALUES (";
 		$sql .= "'".$this->db->idate($this->datec)."'";
 		$sql .= ", '".$this->db->idate($this->dateo)."'";
@@ -2341,9 +2324,6 @@ class AccountLine extends CommonObjectLine
 		$sql .= ", ".(int) $this->rappro;
 		$sql .= ", ".($this->numero_compte ? "'".$this->db->escape($this->numero_compte)."'" : "''");
 		$sql .= ", ".($this->num_releve ? "'".$this->db->escape($this->num_releve)."'" : "null");
-		$sql .= ", ".($this->category_custom !== null ? "'".$this->db->escape($this->category_custom)."'" : "null");
-		$sql .= ", ".($this->service_custom !== null ? "'".$this->db->escape($this->service_custom)."'" : "null");
-		$sql .= ", ".($this->resource_custom !== null ? "'".$this->db->escape($this->resource_custom)."'" : "null");
 		$sql .= ")";
 
 

@@ -1313,40 +1313,44 @@ if (!empty($usemargins) && $user->hasRight('margins', 'creer')) {
 	}
 
 	function setforpredef() {
-    console.log("objectline_create.tpl::setforpredef We hide some fields, show dates");
+		console.log("objectline_create.tpl::setforpredef We hide some fields, show dates");
 
-    jQuery("#select_type").val(-1);
-    jQuery("#select_type").addClass("placeholder");
+		jQuery("#select_type").val(-1);
+		jQuery("#select_type").addClass("placeholder");
+		/* jQuery("#select_type").trigger("change"); // Disabled. This create troubles. Never mind if the rester of combo is not done when using an ajax select_type combo. We don't use it because we are not able to call a focus on a change event of this combo. */
 
-    jQuery("#prod_entry_mode_free").prop('checked',false).change();
-    jQuery("#prod_entry_mode_predef").prop('checked',true).change();
-
-    // Always show price fields for both products and MOs
-    jQuery("#price_ht").val('').show();
-    jQuery("#multicurrency_price_ht").val('').show();
-    jQuery("#title_up_ht, #title_up_ht_currency").show();
-
-    <?php if (!getDolGlobalString('MAIN_DISABLE_EDIT_PREDEF_PRICETTC')) { ?>
-        jQuery("#price_ttc").val('').show();
-        jQuery("#multicurrency_price_ttc").val('').show();
-        jQuery("#title_up_ttc, #title_up_ttc_currency").show();
-    <?php } else { ?>
-        jQuery("#price_ttc").val('').hide();
-        jQuery("#multicurrency_price_ttc").val('').hide();
-        jQuery("#title_up_ttc, #title_up_ttc_currency").hide();
-    <?php } ?>
-    /* jQuery("#tva_tx, #title_vat").hide(); */
-    /* jQuery("#title_fourn_ref").hide(); */
-    <?php if (!getDolGlobalString('DISPLAY_MARGIN_RATES')) { ?>
-        jQuery("#np_marginRate, .np_marginRate").hide();
-    <?php } ?>
-    <?php if (!getDolGlobalString('DISPLAY_MARK_RATES')) { ?>
-        jQuery("#np_markRate, .np_markRate").hide();
-    <?php } ?>
-    jQuery("#units, #title_units").hide();
-    jQuery("#buying_price").show();
-    jQuery('#trlinefordates, .divlinefordates').show();
-}
+		jQuery("#prod_entry_mode_free").prop('checked',false).change();
+		jQuery("#prod_entry_mode_predef").prop('checked',true).change();
+		<?php if (!getDolGlobalString('MAIN_DISABLE_EDIT_PREDEF_PRICEHT')) { ?>
+			jQuery("#price_ht").val('').show();
+			jQuery("#multicurrency_price_ht").val('').show();
+			jQuery("#title_up_ht, #title_up_ht_currency").show();
+		<?php } else { ?>
+			//jQuery("#price_ht").val('').hide();
+			jQuery("#multicurrency_price_ht").val('').hide();
+			jQuery("#title_up_ht, #title_up_ht_currency").hide();
+		<?php } ?>
+		<?php if (!getDolGlobalString('MAIN_DISABLE_EDIT_PREDEF_PRICETTC')) { ?>
+			jQuery("#price_ttc").val('').show();
+			jQuery("#multicurrency_price_ttc").val('').show();
+			jQuery("#title_up_ttc, #title_up_ttc_currency").show();
+		<?php } else { ?>
+			jQuery("#price_ttc").val('').hide();
+			jQuery("#multicurrency_price_ttc").val('').hide();
+			jQuery("#title_up_ttc, #title_up_ttc_currency").hide();
+		<?php } ?>
+		/* jQuery("#tva_tx, #title_vat").hide(); */
+		/* jQuery("#title_fourn_ref").hide(); */
+		<?php if (!getDolGlobalString('DISPLAY_MARGIN_RATES')) { ?>
+			jQuery("#np_marginRate, .np_marginRate").hide();
+		<?php } ?>
+		<?php if (!getDolGlobalString('DISPLAY_MARK_RATES')) { ?>
+			jQuery("#np_markRate, .np_markRate").hide();
+		<?php } ?>
+		jQuery("#units, #title_units").hide();
+		jQuery("#buying_price").show();
+		jQuery('#trlinefordates, .divlinefordates').show();
+	}
 
 <?php
 

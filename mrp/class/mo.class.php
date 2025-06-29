@@ -50,9 +50,7 @@ class Mo extends CommonObject
 
 	const STATUS_DRAFT = 0;
 	const STATUS_VALIDATED = 1; // To produce
-	const STATUS_INPROGRESS = 2; // Will display as "Shipped"
-	// const STATUS_PRODUCED = 3; // Moved down to keep numeric order for now
-	const STATUS_STARTED = 4;      // New status
+	const STATUS_INPROGRESS = 2;
 	const STATUS_PRODUCED = 3;
 	const STATUS_CANCELED = 9;
 
@@ -109,7 +107,7 @@ class Mo extends CommonObject
 		'date_end_planned' => array('type' => 'datetime', 'label' => 'DateEndPlannedMo', 'enabled' => 1, 'visible' => 1, 'position' => 56, 'notnull' => -1, 'index' => 1, 'alwayseditable' => 1, 'csslist' => 'nowraponall'),
 		'import_key' => array('type' => 'varchar(14)', 'label' => 'ImportId', 'enabled' => 1, 'visible' => -2, 'position' => 1000, 'notnull' => -1,),
 		'model_pdf' => array('type' => 'varchar(255)', 'label' => 'Model pdf', 'enabled' => 1, 'visible' => 0, 'position' => 1010),
-		'status' => array('type' => 'integer', 'label' => 'Status', 'enabled' => 1, 'visible' => 2, 'position' => 1000, 'default' => '0', 'notnull' => 1, 'index' => 1, 'arrayofkeyval' => array('0' => 'Draft', '1' => 'Validated', '2' => 'InProgress', '4' => 'StatusMOStarted', '3' => 'StatusMOProduced', '9' => 'Canceled')),
+		'status' => array('type' => 'integer', 'label' => 'Status', 'enabled' => 1, 'visible' => 2, 'position' => 1000, 'default' => '0', 'notnull' => 1, 'index' => 1, 'arrayofkeyval' => array('0' => 'Draft', '1' => 'Validated', '2' => 'InProgress', '3' => 'StatusMOProduced', '9' => 'Canceled')),
 		'fk_parent_line' => array('type' => 'integer:MoLine:mrp/class/mo.class.php', 'label' => 'ParentMo', 'enabled' => 1, 'visible' => 0, 'position' => 1020, 'default' => '0', 'notnull' => 0, 'index' => 1,'showoncombobox' => 0),
 	);
 	/**
@@ -1674,56 +1672,30 @@ public function createProduction(User $user, $notrigger = 0)
 			//$langs->load("mrp");
 			$this->labelStatus[self::STATUS_DRAFT] = $langs->transnoentitiesnoconv('Draft');
 			$this->labelStatus[self::STATUS_VALIDATED] = $langs->transnoentitiesnoconv('ValidatedToProduce');
-			$this->labelStatus[self::STATUS_INPROGRESS] = $langs->transnoentitiesnoconv('Shipped'); // Status 2 displays as Shipped
-			$this->labelStatus[self::STATUS_STARTED] = $langs->transnoentitiesnoconv('StatusMOStarted'); // Status 4
-			$this->labelStatus[self::STATUS_PRODUCED] = $langs->transnoentitiesnoconv('StatusMOProduced'); // Status 3
+			$this->labelStatus[self::STATUS_INPROGRESS] = $langs->transnoentitiesnoconv('Shipped');
+			$this->labelStatus[self::STATUS_PRODUCED] = $langs->transnoentitiesnoconv('StatusMOProduced');
 			$this->labelStatus[self::STATUS_CANCELED] = $langs->transnoentitiesnoconv('Canceled');
 
 			$this->labelStatusShort[self::STATUS_DRAFT] = $langs->transnoentitiesnoconv('Draft');
 			$this->labelStatusShort[self::STATUS_VALIDATED] = $langs->transnoentitiesnoconv('Validated');
-			$this->labelStatusShort[self::STATUS_INPROGRESS] = $langs->transnoentitiesnoconv('Shipped'); // Status 2 displays as Shipped
-			$this->labelStatusShort[self::STATUS_STARTED] = $langs->transnoentitiesnoconv('StatusMOStarted'); // Status 4
-			$this->labelStatusShort[self::STATUS_PRODUCED] = $langs->transnoentitiesnoconv('StatusMOProduced'); // Status 3
+			$this->labelStatusShort[self::STATUS_INPROGRESS] = $langs->transnoentitiesnoconv('Shipped');
+			$this->labelStatusShort[self::STATUS_PRODUCED] = $langs->transnoentitiesnoconv('StatusMOProduced');
 			$this->labelStatusShort[self::STATUS_CANCELED] = $langs->transnoentitiesnoconv('Canceled');
 		}
 
-		$statusType = 'status'.$status; // Default CSS class base
-		if ($status == self::STATUS_VALIDATED) { // Validated = 1
+		$statusType = 'status'.$status;
+		if ($status == self::STATUS_VALIDATED) {
 			$statusType = 'status1';
 		}
-		// STATUS_INPROGRESS is 2, should use status4 for its "Shipped" display style
-		if ($status == self::STATUS_INPROGRESS) { // In Progress / Shipped = 2
-			$statusType = 'status4'; // This was the class for 'Shipped' before, let's keep it for consistency of "Shipped" display
+		if ($status == self::STATUS_INPROGRESS) {
+			$statusType = 'status4';
 		}
-		// STATUS_STARTED is 4, let's assign it status5 for CSS styling, assuming it's a distinct color/style
-		if ($status == self::STATUS_STARTED) { // Started = 4
-			$statusType = 'status5'; // Typically a blue or another processing color.
-		}
-		if ($status == self::STATUS_PRODUCED) { // Produced = 3
+		if ($status == self::STATUS_PRODUCED) {
 			$statusType = 'status6';
 		}
-		if ($status == self::STATUS_CANCELED) { // Canceled = 9
-			$statusType = 'status0'; // status0 is often used for Draft/Canceled/Closed (grey)
+		if ($status == self::STATUS_CANCELED) {
+			$statusType = 'status9';
 		}
-		// Note: Original code had STATUS_CANCELED as status9. Dolibarr's dolGetStatus uses status0 for grey, status1 for orange/validated, status4 for blue/inprogress, status6 for green/closed-produced.
-		// We should ensure these map to desired visual cues.
-		// If STATUS_CANCELED was status9, it might have its own specific styling. Let's revert to status0 for cancelled for a common grey.
-		// Let's re-verify standard status classes for Dolibarr:
-		// STATUS_DRAFT (0) -> status0 (grey)
-		// STATUS_VALIDATED (1) -> status1 (orange-ish, "Validated, not paid") or status3 (darker orange, "Validated") - let's use status1 for now.
-		// STATUS_INPROGRESS (2) -> displays as "Shipped", was status4 (blue-ish). This is fine.
-		// STATUS_STARTED (4) -> NEW. Let's use status5. This is often a light blue or another active processing color. We need to ensure this class exists or provides a good default.
-		// STATUS_PRODUCED (3) -> status6 (green, "Closed (paid)"). This is fine.
-		// STATUS_CANCELED (9) -> status0 (grey, "Closed (abandoned)"). This is fine.
-
-		// Corrected mapping based on common Dolibarr status colors:
-		if ($status == self::STATUS_DRAFT) $statusType = 'status0'; // Grey
-		if ($status == self::STATUS_VALIDATED) $statusType = 'status1'; // Orange-ish
-		if ($status == self::STATUS_INPROGRESS) $statusType = 'status4'; // Blue-ish (for "Shipped")
-		if ($status == self::STATUS_STARTED) $statusType = 'status5';    // Another distinct color, e.g. lighter blue or purple.
-		if ($status == self::STATUS_PRODUCED) $statusType = 'status6'; // Green
-		if ($status == self::STATUS_CANCELED) $statusType = 'status0'; // Grey (same as draft)
-
 
 		return dolGetStatus($this->labelStatus[$status], $this->labelStatusShort[$status], '', $statusType, $mode);
 	}
@@ -2205,6 +2177,7 @@ public function getCalculatedUnitCost()
     return price2num($calculated_bom_cost / $effective_qty, 'MU');
 }
 }
+
 
 
 

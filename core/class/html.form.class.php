@@ -3302,7 +3302,8 @@ require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php'; // For fetc
 
 $sqlMo = "SELECT rowid, ref, qty, manufacturing_cost, fk_product";
 $sqlMo .= " FROM " . $this->db->prefix() . "mrp_mo";
-$sqlMo .= " WHERE status IN (" . ((int) Mo::STATUS_INPROGRESS) . "," . ((int) Mo::STATUS_PRODUCED) . ")";
+$sqlMo .= " WHERE status IN (" . ((int)Mo::STATUS_VALIDATED) . "," . ((int)Mo::STATUS_INPROGRESS) . "," . ((int)Mo::STATUS_PRODUCED) . ")";
+
 $sqlMo .= " AND entity IN (" . getEntity('mrp_mo') . ")"; // Entity filter for multi-company
 $resMo = $this->db->query($sqlMo);
 dol_syslog(get_class($this) . "::select_produits_list search manufacturing orders (In Progress and Produced)", LOG_DEBUG);
@@ -11919,3 +11920,4 @@ if (empty($outputmode)) {
 		return $out;
 	}
 }
+

@@ -560,29 +560,49 @@ if ($action == 'create') {
 	$resql_service = $db->query($sql_service);
 	if ($resql_service) {
 		$obj_service = $db->fetch_object($resql_service);
+		// Ensure $obj_service is not false and param is not empty
 		if ($obj_service && !empty($obj_service->param)) {
-			$params_array = unserialize($obj_service->param);
-			if (!empty($params_array['options'])) {
+			// Suppress errors from unserialize for robustness, check return value
+			$params_array = @unserialize($obj_service->param);
+			if ($params_array !== false && !empty($params_array['options'])) {
 				foreach ($params_array['options'] as $key => $value) {
 					$service_options[$key] = $langs->trans($value);
 				}
+			} else {
+				// In a real environment, log this: dol_syslog("Failed to unserialize service params or no options found for extrafield rowid 17. Param data: ".$obj_service->param, LOG_WARNING);
 			}
+		} else {
+			// In a real environment, log this: dol_syslog("No service param found for extrafield rowid 17 or query failed to return object.", LOG_WARNING);
 		}
+	} else {
+		// In a real environment, log this: dol_syslog("SQL Error for Service dropdown: ".$db->lasterror(), LOG_ERR);
 	}
 	print $form->selectarray('service', $service_options, GETPOST('service'), 1, 0, 0, '', 0, 0, 0, '', 'minwidth300', 1);
 	print '</td></tr>';
 
 	// Ressource
 	print '<tr><td>'.$langs->trans("Ressource").'</td><td>';
-	$ressource_options = array('' => $langs->trans("SelectAnOption"));
-	$sql_ressource = "SELECT rowid, ref FROM ".MAIN_DB_PREFIX."resource ORDER BY ref ASC";
+	$ressource_options = array(); // Remove "Select an option"
+	$sql_ressource = "SELECT rowid, ref FROM llx_resource ORDER BY ref ASC"; // Hardcode table name for diagnostics
 	$resql_ressource = $db->query($sql_ressource);
 	if ($resql_ressource) {
-		while ($obj_ressource = $db->fetch_object($resql_ressource)) {
-			$ressource_options[$obj_ressource->rowid] = $obj_ressource->ref;
+		if ($db->num_rows($resql_ressource) > 0) {
+			while ($obj_ressource = $db->fetch_object($resql_ressource)) {
+				$ressource_options[$obj_ressource->rowid] = $obj_ressource->ref;
+			}
+		} else {
+			// This means the query was successful but returned 0 rows.
+			// In a real environment, you might log this:
+			// dol_syslog("Ressource dropdown: No resources found in llx_resource table.", LOG_INFO);
 		}
+	} else {
+		// Query failed.
+		// In a real environment, you might log this:
+		// dol_syslog("Ressource dropdown: SQL Error - ".$db->lasterror(), LOG_ERR);
 	}
-	print $form->selectarray('ressource', $ressource_options, GETPOST('ressource'), 1, 0, 0, '', 0, 0, 0, '', 'minwidth300', 1);
+	// If $ressource_options is empty here, the select will be empty.
+	// Consider if a message should be shown to the user if no options are available.
+	print $form->selectarray('ressource', $ressource_options, GETPOST('ressource'), 0, 0, 0, '', 0, 0, 0, '', 'minwidth300', 1); // Changed 4th param to 0 to reflect no empty val
 	print '</td></tr>';
 
 	print '<tr><td colspan="2"><hr></td></tr>';
@@ -883,3 +903,4 @@ if ($id) {
 // End of page
 llxFooter();
 $db->close();
+

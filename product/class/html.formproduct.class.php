@@ -314,12 +314,7 @@ class FormProduct
 			$this->cache_warehouses = array();
 		}
 
-		// Always exclude warehouse 7
-if (!in_array(7, $exclude)) {
-    $exclude[] = 7;
-}
-$this->loadWarehouses($fk_product, '', $filterstatus, true, $exclude, $stockMin, $orderBy);
-
+		$this->loadWarehouses($fk_product, '', $filterstatus, true, $exclude, $stockMin, $orderBy);
 		$nbofwarehouses = count($this->cache_warehouses);
 
 		if ($conf->use_javascript_ajax && !$forcecombo) {

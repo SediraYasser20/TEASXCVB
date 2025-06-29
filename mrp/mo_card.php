@@ -692,16 +692,16 @@ if ($object->id > 0 && (empty($action) || ($action != 'edit' && $action != 'crea
 
 	// Confirmation to cancel
 	if ($action == 'cancel') {
-		$formquestion = array(
-			array(
-				'label' => $langs->trans('MoCancelConsumedAndProducedLines'),
-				'name' => 'alsoCancelConsumedAndProducedLines',
-				'type' => 'checkbox',
-				'value' => 0
-			),
-		);
-		$formconfirm = $form->formconfirm($_SERVER["PHP_SELF"] . '?id=' . $object->id, $langs->trans('CancelMo'), $langs->trans('ConfirmCancelMo'), 'confirm_cancel', $formquestion, 0, 1);
-	}
+    $text = $langs->trans('ConfirmCancelMo') . '<br>' . $langs->trans('MoCancelConsumedAndProducedLines');
+    $formquestion = array(
+        array(
+            'type' => 'hidden',
+            'name' => 'alsoCancelConsumedAndProducedLines',
+            'value' => '1'
+        )
+    );
+    $formconfirm = $form->formconfirm($_SERVER["PHP_SELF"] . '?id=' . $object->id, $langs->trans('CancelMo'), $text, 'confirm_cancel', $formquestion, 0, 1);
+}
 
 	// Clone confirmation
 	if ($action == 'clone') {
@@ -1022,3 +1022,4 @@ if ($object->id > 0 && (empty($action) || ($action != 'edit' && $action != 'crea
 // End of page
 llxFooter();
 $db->close();
+

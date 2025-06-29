@@ -626,3 +626,4 @@ private function shouldClassify($conf, $totalonlinkedelements, $object_total_ht)
     return (price2num($totalonlinkedelements, 'MT') >= price2num($object_total_ht, 'MT'));
 }
 }
+

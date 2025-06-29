@@ -30,7 +30,7 @@ class pdf_mo_serial_label extends ModelePDFMo
     /**
      * @var array Page format in millimeters (width, height)
      */
-    public $format = array(40, 20); // 40 mm wide × 20 mm high (landscape)
+    public $format = array(40, 20); // 40 mm wide Ã— 20 mm high (landscape)
 
     public function __construct($db)
     {
@@ -64,7 +64,7 @@ class pdf_mo_serial_label extends ModelePDFMo
         $fontSize = 6; // 6 pt for small labels
         $pdf->SetFont('helvetica', '', $fontSize);
 
-        // Compute text height in mm (1 pt ≈ 0.35 mm)
+        // Compute text height in mm (1 pt â‰ˆ 0.35 mm)
         $textH = $fontSize * 0.35;
 
         // Fetch serials
@@ -99,3 +99,4 @@ class pdf_mo_serial_label extends ModelePDFMo
         return 1;
     }
 }
+

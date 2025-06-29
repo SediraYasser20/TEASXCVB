@@ -932,3 +932,4 @@ class PaymentVarious extends CommonObject
 		return length_accounta($account);
 	}
 }
+

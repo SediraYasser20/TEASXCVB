@@ -281,7 +281,11 @@ class Actionssavorders
                 if($object->element == 'order_supplier') {
                     $savorders_status = ($novalidaction == 'deliveredtosupplier') ? $savorders::DELIVERED_SUPPLIER : $savorders::RECEIVED_SUPPLIER;
                 } else {
-                    $savorders_status = ($novalidaction == 'receiptofproduct') ? $savorders::RECIEVED_CUSTOMER : $savorders::DELIVERED_CUSTOMER;
+                    if ($novalidaction == 'process_reimbursement') {
+                        $savorders_status = $savorders::REIMBURSED;
+                    } else {
+                        $savorders_status = ($novalidaction == 'receiptofproduct') ? $savorders::RECIEVED_CUSTOMER : $savorders::DELIVERED_CUSTOMER;
+                    }
                 }
 
                 $texttoadd = str_replace(['<span class="savorders_history_td">', '</span>'], ' ', $texttoadd);
@@ -292,6 +296,10 @@ class Actionssavorders
 
                 $object->array_options["options_savorders_history"] = $extrafieldtxt;
                 $object->array_options["options_savorders_status"] = $savorders_status;
+                // Add facture_sav to extrafields if reimbursement is processed
+                if ($novalidaction == 'process_reimbursement') {
+                    $object->array_options['options_facture_sav'] = GETPOST('facture_sav', 'int');
+                }
                 $result = $object->insertExtraFields();
                 if(!$result) $error++;
             }
@@ -320,6 +328,9 @@ class Actionssavorders
         }
         elseif($novalidaction == 'createdelivery' || $novalidaction == 'deliveredtosupplier') {
             $contenu .= $langs->trans("OrderSavDeliveryProduct");
+        }
+        elseif($novalidaction == 'process_reimbursement') {
+            $contenu .= $langs->trans("OrderSavReimbursementProcessed");
         }
 
         $contenu .= ' <a target="_blank" href="'.dol_buildpath('/product/card.php?id='.$objprod->id, 1).'">';
@@ -395,7 +406,7 @@ class Actionssavorders
 
             $linktogo = $_SERVER["PHP_SELF"].'?id=' . $object->id;
 
-            $tmparray = ['receiptofproduct', 'createdelivery', 'deliveredtosupplier', 'receivedfromsupplier'];
+            $tmparray = ['receiptofproduct', 'createdelivery', 'deliveredtosupplier', 'receivedfromsupplier', 'process_reimbursement'];
 
             if(in_array($action, $tmparray)) {
 
@@ -412,7 +423,11 @@ class Actionssavorders
                 if($object->element == 'order_supplier') {
                     $title = ($action == 'deliveredtosupplier') ? $langs->trans('ProductDeliveredToSupplier') : $langs->trans('ProductReceivedFromSupplier');
                 } else {
-                    $title = ($action == 'receiptofproduct') ? $langs->trans('ProductReceivedFromCustomer') : $langs->trans('ProductDeliveredToCustomer');
+                    if ($action == 'process_reimbursement') {
+                        $title = $langs->trans('ProcessReimbursement');
+                    } else {
+                        $title = ($action == 'receiptofproduct') ? $langs->trans('ProductReceivedFromCustomer') : $langs->trans('ProductDeliveredToCustomer');
+                    }
                 }
 
                 $formproduct = new FormProduct($db);
@@ -440,78 +455,103 @@ class Actionssavorders
                 print '<table class="valid centpercent">';
                     
                     print '<tr>';
-                    print '<td class="left"><b>'.$langs->trans("Product").'</b></td>';
-                    print '<td class="left"><b>'.$langs->trans("batch_number").'</b></td>';
-                    print '<td class="left"><b>'.$langs->trans("Qty").'</b></td>';
-
-                    if($action == 'createdelivery' || $action == 'receivedfromsupplier') {
-                        print '<td class="left">'.$langs->trans("Warehouse").'</td>';
-                    }
-
-                    print '</tr>';
-
-                    for ($i = 0; $i < $nblines; $i++) {
-                        if (empty($object->lines[$i]->fk_product)) {
-                            continue;
-                        }
-
-                        $objprod = new Product($db);
-                        $objprod->fetch($object->lines[$i]->fk_product);
-
-                        if($objprod->type != Product::TYPE_PRODUCT) continue;
-
-                        $hasbatch = $objprod->hasbatch();
-
-                        $tmid = $object->lines[$i]->fk_product;
-
-                        $warehouse  = $s && isset($s[$tmid]) && isset($s[$tmid]['warehouse']) ? $s[$tmid]['warehouse'] : 0;
-                        $qty        = $s && isset($s[$tmid]) && isset($s[$tmid]['qty']) ? $s[$tmid]['qty'] : $object->lines[$i]->qty;
-
-                        print '<tr class="oddeven_">';
-                        
-                        // Ref Product
-                        print '<td class="left width300">'.$objprod->getNomUrl(1).'</td>';
-
-                        // Batch
-                        print '<td class="left width300">';
-                        if($hasbatch) {
-                            for ($z=0; $z < $qty; $z++) { 
-                                $batch = $s && isset($s[$tmid]) && isset($s[$tmid]['batch'][$z]) ? $s[$tmid]['batch'][$z] : '';
-                                print '<input type="text" class="flat width200" name="savorders_data['.$tmid.'][batch]['.$z.']" value="'.$batch.'"/>';
+                    if ($action == 'process_reimbursement') {
+                        print '<tr><td colspan="2">'.$langs->trans("SelectInvoiceForReimbursement").'</td></tr>';
+                        print '<tr>';
+                        print '<td class="fieldrequired">'.$langs->trans("Invoice").'</td>';
+                        print '<td>';
+                        // Assuming you have a method to get invoices for the client
+                        // This is a placeholder, you'll need to implement getInvoicesForClient() or similar
+                        $factures = array(); // Replace with actual invoice fetching
+                        if (method_exists($object, 'fetch_thirdparty')) {
+                            $object->fetch_thirdparty();
+                            // Example: $factures = $this->getInvoicesForClient($object->client->id);
+                            // For now, let's assume $factures is populated with id => ref
+                            // You'll need to implement a proper way to get client invoices
+                            $sql_invoices = "SELECT rowid, facnumber FROM ".MAIN_DB_PREFIX."facture WHERE fk_soc = ".$object->fk_soc." AND fk_statut > 0 ORDER BY facnumber DESC";
+                            $resql_invoices = $db->query($sql_invoices);
+                            if ($resql_invoices) {
+                                while ($obj_inv = $db->fetch_object($resql_invoices)) {
+                                    $factures[$obj_inv->rowid] = $obj_inv->facnumber;
+                                }
                             }
-                        } else {
-                            print '-';
                         }
+                        print $form->selectarray('facture_sav', $factures, GETPOST('facture_sav', 'int'), 1);
                         print '</td>';
+                        print '</tr>';
+                    } else {
+                        print '<tr>';
+                        print '<td class="left"><b>'.$langs->trans("Product").'</b></td>';
+                        print '<td class="left"><b>'.$langs->trans("batch_number").'</b></td>';
+                        print '<td class="left"><b>'.$langs->trans("Qty").'</b></td>';
 
-                        $disabled = ($hasbatch) ? 'disabled' : '';
-
-                        $maxqty = ($hasbatch) ? 'max="'.$qty.'"' : '';
-
-                        // Qty
-                        print '<td class="left ">';
-                        print '<input type="number" class="flat width50" name="savorders_data['.$tmid.'][qty]" value="'.$qty.'" '.$maxqty.' min="1" step="any" '.$disabled.'/>';
-                        print '</td>';
-
-                        // Warehouse
                         if($action == 'createdelivery' || $action == 'receivedfromsupplier') {
-                            print '<td class="left selectWarehouses">';
-                            $formproduct = new FormProduct($db);
-                            // Ensure $forcecombo is defined
-                            if (!isset($forcecombo)) {
-                                $forcecombo = 0;  // Default value, adjust if necessary
-                            }
-                            print $formproduct->selectWarehouses($warehouse, 'savorders_data['.$tmid.'][warehouse]', '', 0, 0, 0, '', 0, $forcecombo);
-                            print '</td>';
+                            print '<td class="left">'.$langs->trans("Warehouse").'</td>';
                         }
-
                         print '</tr>';
 
+                        for ($i = 0; $i < $nblines; $i++) {
+                            if (empty($object->lines[$i]->fk_product)) {
+                                continue;
+                            }
+
+                            $objprod = new Product($db);
+                            $objprod->fetch($object->lines[$i]->fk_product);
+
+                            if($objprod->type != Product::TYPE_PRODUCT) continue;
+
+                            $hasbatch = $objprod->hasbatch();
+
+                            $tmid = $object->lines[$i]->fk_product;
+
+                            $warehouse  = $s && isset($s[$tmid]) && isset($s[$tmid]['warehouse']) ? $s[$tmid]['warehouse'] : 0;
+                            $qty        = $s && isset($s[$tmid]) && isset($s[$tmid]['qty']) ? $s[$tmid]['qty'] : $object->lines[$i]->qty;
+
+                            print '<tr class="oddeven_">';
+                            
+                            // Ref Product
+                            print '<td class="left width300">'.$objprod->getNomUrl(1).'</td>';
+
+                            // Batch
+                            print '<td class="left width300">';
+                            if($hasbatch) {
+                                for ($z=0; $z < $qty; $z++) { 
+                                    $batch = $s && isset($s[$tmid]) && isset($s[$tmid]['batch'][$z]) ? $s[$tmid]['batch'][$z] : '';
+                                    print '<input type="text" class="flat width200" name="savorders_data['.$tmid.'][batch]['.$z.']" value="'.$batch.'"/>';
+                                }
+                            } else {
+                                print '-';
+                            }
+                            print '</td>';
+
+                            $disabled = ($hasbatch) ? 'disabled' : '';
+
+                            $maxqty = ($hasbatch) ? 'max="'.$qty.'"' : '';
+
+                            // Qty
+                            print '<td class="left ">';
+                            print '<input type="number" class="flat width50" name="savorders_data['.$tmid.'][qty]" value="'.$qty.'" '.$maxqty.' min="1" step="any" '.$disabled.'/>';
+                            print '</td>';
+
+                            // Warehouse
+                            if($action == 'createdelivery' || $action == 'receivedfromsupplier') {
+                                print '<td class="left selectWarehouses">';
+                                $formproduct = new FormProduct($db);
+                                // Ensure $forcecombo is defined
+                                if (!isset($forcecombo)) {
+                                    $forcecombo = 0;  // Default value, adjust if necessary
+                                }
+                                print $formproduct->selectWarehouses($warehouse, 'savorders_data['.$tmid.'][warehouse]', '', 0, 0, 0, '', 0, $forcecombo);
+                                print '</td>';
+                            }
+
+                            print '</tr>';
+                        }
                     }
 
-                    print '<tr><td colspan="4"></td></tr>';
+                    print '<tr><td colspan="'.($action == 'process_reimbursement' ? 2 : 4).'"></td></tr>';
                     print '<tr>';
-                        print '<td colspan="4" class="center">';
+                        print '<td colspan="'.($action == 'process_reimbursement' ? 2 : 4).'" class="center">';
                         print '<div class="savorders_dateaction">';
                         print '<b>'.$langs->trans('Date').'</b>: ';
                         print $form->selectDate('', 'savorders_date', 0, 0, 0, '', 1, 1);
@@ -520,7 +560,7 @@ class Actionssavorders
                     print '</tr>';
 
                     print '<tr class="valid">';
-                    print '<td class="valid center" colspan="4">';
+                    print '<td class="valid center" colspan="'.($action == 'process_reimbursement' ? 2 : 4).'">';
                     // Fix: Correctly handle form submission for Validate and Cancel
                     print '<input type="submit" class="button valignmiddle" name="validate" value="'.$langs->trans("Validate").'">';
                     print '<input type="submit" class="button button-cancel" name="cancel" value="'.$langs->trans("Cancel").'">';
@@ -594,6 +634,10 @@ if ($object->statut < 1) return 0;
                         print '<a id="savorders_button" class="savorders butAction badge-status1" href="'.$linktogo.'&action=createdelivery&token='.newToken().'">' . $langs->trans('ProductDeliveredToCustomer');
                         print '</a>';
                     }
+                    elseif($savorders_status == savorders::DELIVERED_CUSTOMER) {
+                        print '<a id="savorders_button" class="savorders butAction badge-status3" href="'.$linktogo.'&action=process_reimbursement&token='.newToken().'">' . $langs->trans('ProcessReimbursement');
+                        print '</a>';
+                    }
                 }
 
                 print '</div>';
@@ -604,4 +648,38 @@ if ($object->statut < 1) return 0;
 
         return 0;
     }
+        // ————————————————————————————————————————————————————
+    // Override the SAV STATUS extrafield display on the order card
+    public function printObjectOptions($parameters, &$object, &$action, $hookmanager)
+    {
+        global $db, $langs, $conf;
+
+        // Only on customer order card
+        if (! in_array('ordercard', explode(':', $parameters['context']))) {
+            return 0;
+        }
+
+        if (isset($parameters['optionals']['savorders_status'])) {
+            $status = (int) $object->array_options['options_savorders_status'];
+            if ($status === savorders::REIMBURSED) {
+                // Load invoice
+                $facId = (int) $object->array_options['options_facture_sav'];
+                $label = $langs->trans('Reimbursed');  // fallback
+                if ($facId > 0) {
+                    $fac = new Facture($db);
+                    if ($fac->fetch($facId) > 0) {
+                        $amt = price($fac->total_ttc).' '.$langs->trans("Currency".$conf->currency);
+                        $label = $langs->trans('ClientReimbursedAmount', $amt);
+                    }
+                }
+                // Override what Dolibarr will print for savorders_status
+                $parameters['optionals']['savorders_status']['value']
+                    = '<span class="badge badge-status4">'.$label.'</span>';
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+
 }

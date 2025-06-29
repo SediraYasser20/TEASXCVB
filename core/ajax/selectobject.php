@@ -164,30 +164,7 @@ top_httphead($outjson ? 'application/json' : 'text/html');
 
 //print '<!-- Ajax page called with url '.dol_escape_htmltag($_SERVER["PHP_SELF"]).'?'.dol_escape_htmltag($_SERVER["QUERY_STRING"]).' -->'."\n";
 
-if ($objecttmp && $objecttmp->element == 'product') {
-	// Extend product list to include fabrication orders
-	$arrayresult = $form->selectForFormsList($objecttmp, $htmlname, 0, 0, $searchkey, '', '', '', 0, 1, 0, '', $filter);
-
-	// Load fabrication orders as pseudo-products
-	$sql = "SELECT rowid, ref, label FROM ".MAIN_DB_PREFIX."fabrication_order";
-	$sql .= " WHERE entity IN (".getEntity('fabrication_order').")";
-	$sql .= " AND fk_statut = 1"; // only show open fabrication orders
-	$sql .= " AND (ref LIKE '%".$db->escape($searchkey)."%' OR label LIKE '%".$db->escape($searchkey)."%')";
-	$resql = $db->query($sql);
-	if ($resql) {
-		while ($obj = $db->fetch_object($resql)) {
-			$arrayresult[] = array(
-				'id' => 'FAB'.$obj->rowid,
-				'label' => 'FAB - '.$obj->ref.' - '.$obj->label,
-				'fullname' => 'FAB - '.$obj->ref.' - '.$obj->label,
-				'key' => 'FAB'.$obj->rowid,
-			);
-		}
-	}
-} else {
-	$arrayresult = $form->selectForFormsList($objecttmp, $htmlname, 0, 0, $searchkey, '', '', '', 0, 1, 0, '', $filter);
-}
-
+$arrayresult = $form->selectForFormsList($objecttmp, $htmlname, 0, 0, $searchkey, '', '', '', 0, 1, 0, '', $filter);
 
 $db->close();
 

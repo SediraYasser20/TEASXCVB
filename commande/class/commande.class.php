@@ -1100,8 +1100,7 @@ class Commande extends CommonOrder
 						$originid,
 						0,
 						$line->ref_ext,
-						1,
-						($line->fk_mrp_mo ?? 0) 
+						1
 					);
 
 					if ($result < 0) {
@@ -1290,12 +1289,6 @@ class Commande extends CommonOrder
 		$num = count($this->lines);
 		for ($i = 0; $i < $num; $i++) {
 			$this->lines[$i]->ref_ext = '';
-            // Carry over fk_mrp_mo if it exists on the source line
-            if (isset($objFrom->lines[$i]->fk_mrp_mo)) {
-                $this->lines[$i]->fk_mrp_mo = $objFrom->lines[$i]->fk_mrp_mo;
-            } else {
-                $this->lines[$i]->fk_mrp_mo = 0; // Default if not present in source
-            }
 		}
 
 		// Create clone
@@ -1402,13 +1395,6 @@ class Commande extends CommonOrder
 
 			$line->origin           = $object->element;
 			$line->origin_id        = $object->lines[$i]->id;
-			// Add fk_mrp_mo if exists on proposal line (custom field or future core field)
-			if (isset($object->lines[$i]->fk_mrp_mo)) {
-				$line->fk_mrp_mo = $object->lines[$i]->fk_mrp_mo;
-			} else {
-				$line->fk_mrp_mo = 0; // Default if not present
-			}
-
 
 			// get extrafields from original line
 			$object->lines[$i]->fetch_optionals();
@@ -1545,7 +1531,6 @@ class Commande extends CommonOrder
 	 * 	@param		float			$pu_ht_devise		Unit price in currency
 	 * 	@param		string			$ref_ext		    line external reference
 	 *  @param		int				$noupdateafterinsertline	No update after insert of line
-	 *  @param		int				$fk_mrp_mo			ID of the Manufacturing Order linked to this line
 	 *	@return     int             					>0 if OK, <0 if KO
 	 *
 	 *	@see        add_product()
@@ -1555,13 +1540,13 @@ class Commande extends CommonOrder
 	 *	par l'appelant par la methode get_default_tva(societe_vendeuse,societe_acheteuse,produit)
 	 *	et le desc doit deja avoir la bonne valeur (a l'appelant de gerer le multilangue)
 	 */
-	public function addline($desc, $pu_ht, $qty, $txtva, $txlocaltax1 = 0, $txlocaltax2 = 0, $fk_product = 0, $remise_percent = 0, $info_bits = 0, $fk_remise_except = 0, $price_base_type = 'HT', $pu_ttc = 0, $date_start = '', $date_end = '', $type = 0, $rang = -1, $special_code = 0, $fk_parent_line = 0, $fk_fournprice = null, $pa_ht = 0, $label = '', $array_options = array(), $fk_unit = null, $origin = '', $origin_id = 0, $pu_ht_devise = 0, $ref_ext = '', $noupdateafterinsertline = 0, $fk_mrp_mo = 0)
+	public function addline($desc, $pu_ht, $qty, $txtva, $txlocaltax1 = 0, $txlocaltax2 = 0, $fk_product = 0, $remise_percent = 0, $info_bits = 0, $fk_remise_except = 0, $price_base_type = 'HT', $pu_ttc = 0, $date_start = '', $date_end = '', $type = 0, $rang = -1, $special_code = 0, $fk_parent_line = 0, $fk_fournprice = null, $pa_ht = 0, $label = '', $array_options = array(), $fk_unit = null, $origin = '', $origin_id = 0, $pu_ht_devise = 0, $ref_ext = '', $noupdateafterinsertline = 0)
 	{
 		global $mysoc, $langs, $user;
 
 		$logtext = "::addline commandeid=$this->id, desc=$desc, pu_ht=$pu_ht, qty=$qty, txtva=$txtva, fk_product=$fk_product, remise_percent=$remise_percent";
 		$logtext .= ", info_bits=$info_bits, fk_remise_except=$fk_remise_except, price_base_type=$price_base_type, pu_ttc=$pu_ttc, date_start=$date_start";
-		$logtext .= ", date_end=$date_end, type=$type special_code=$special_code, fk_unit=$fk_unit, origin=$origin, origin_id=$origin_id, pu_ht_devise=$pu_ht_devise, ref_ext=$ref_ext rang=$rang, fk_mrp_mo=$fk_mrp_mo";
+		$logtext .= ", date_end=$date_end, type=$type special_code=$special_code, fk_unit=$fk_unit, origin=$origin, origin_id=$origin_id, pu_ht_devise=$pu_ht_devise, ref_ext=$ref_ext rang=$rang";
 		dol_syslog(get_class($this).$logtext, LOG_DEBUG);
 
 		if ($this->statut == self::STATUS_DRAFT) {
@@ -1741,7 +1726,6 @@ class Commande extends CommonOrder
 			$this->line->date_end = $date_end;
 
 			$this->line->fk_fournprice = $fk_fournprice;
-			$this->line->fk_mrp_mo = $fk_mrp_mo;
 			$this->line->pa_ht = $pa_ht;	// Can be '' when not defined or 0 if defined to 0 or a price value
 
 			// Multicurrency
@@ -3160,14 +3144,13 @@ class Commande extends CommonOrder
 	 * 	@param		int				$notrigger			disable line update trigger
 	 * 	@param		string			$ref_ext			external reference
 	 *	@param		int				$rang				line rank
-	 *  @param		int				$fk_mrp_mo			ID of the Manufacturing Order linked to this line
 	 *  @return   	int              					Return integer < 0 if KO, > 0 if OK
 	 */
-	public function updateline($rowid, $desc, $pu, $qty, $remise_percent, $txtva, $txlocaltax1 = 0.0, $txlocaltax2 = 0.0, $price_base_type = 'HT', $info_bits = 0, $date_start = '', $date_end = '', $type = 0, $fk_parent_line = 0, $skip_update_total = 0, $fk_fournprice = null, $pa_ht = 0, $label = '', $special_code = 0, $array_options = array(), $fk_unit = null, $pu_ht_devise = 0, $notrigger = 0, $ref_ext = '', $rang = 0, $fk_mrp_mo = 0)
+	public function updateline($rowid, $desc, $pu, $qty, $remise_percent, $txtva, $txlocaltax1 = 0.0, $txlocaltax2 = 0.0, $price_base_type = 'HT', $info_bits = 0, $date_start = '', $date_end = '', $type = 0, $fk_parent_line = 0, $skip_update_total = 0, $fk_fournprice = null, $pa_ht = 0, $label = '', $special_code = 0, $array_options = array(), $fk_unit = null, $pu_ht_devise = 0, $notrigger = 0, $ref_ext = '', $rang = 0)
 	{
 		global $conf, $mysoc, $langs, $user;
 
-		dol_syslog(get_class($this)."::updateline id=$rowid, desc=$desc, pu=$pu, qty=$qty, remise_percent=$remise_percent, txtva=$txtva, txlocaltax1=$txlocaltax1, txlocaltax2=$txlocaltax2, price_base_type=$price_base_type, info_bits=$info_bits, date_start=$date_start, date_end=$date_end, type=$type, fk_parent_line=$fk_parent_line, pa_ht=$pa_ht, special_code=$special_code, ref_ext=$ref_ext, fk_mrp_mo=$fk_mrp_mo");
+		dol_syslog(get_class($this)."::updateline id=$rowid, desc=$desc, pu=$pu, qty=$qty, remise_percent=$remise_percent, txtva=$txtva, txlocaltax1=$txlocaltax1, txlocaltax2=$txlocaltax2, price_base_type=$price_base_type, info_bits=$info_bits, date_start=$date_start, date_end=$date_end, type=$type, fk_parent_line=$fk_parent_line, pa_ht=$pa_ht, special_code=$special_code, ref_ext=$ref_ext");
 		include_once DOL_DOCUMENT_ROOT.'/core/lib/price.lib.php';
 
 		if ($this->statut == Commande::STATUS_DRAFT) {
@@ -3323,7 +3306,6 @@ class Commande extends CommonOrder
 			$this->line->fk_parent_line = $fk_parent_line;
 			$this->line->skip_update_total = $skip_update_total;
 			$this->line->fk_unit        = $fk_unit;
-			$this->line->fk_mrp_mo      = $fk_mrp_mo;
 
 			$this->line->fk_fournprice = $fk_fournprice;
 			$this->line->pa_ht = $pa_ht;
@@ -4288,4 +4270,3 @@ class Commande extends CommonOrder
 		return $this->setSignedStatusCommon($user, $status, $notrigger, $triggercode);
 	}
 }
-

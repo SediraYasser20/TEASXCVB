@@ -5814,7 +5814,7 @@ if ($action == 'create') {
 				)
 			);
 			// Edit a validated invoice without any payment and not transferred to accounting
-			if ($object->status == Facture::STATUS_VALIDATED && $user->admin) {
+			if ($object->status == Facture::STATUS_VALIDATED && $usercanunvalidate) {
 				// We check if lines of invoice are not already transferred into accountancy
 				$ventilExportCompta = $object->getVentilExportCompta();
 

@@ -113,39 +113,74 @@ class pdf_rouget extends ModelePdfExpedition
 		$this->option_draft_watermark = 1; // Support add of a watermark on drafts
 		$this->watermark = '';
 
-		// Define position of columns
-		$this->posxdesc = $this->marge_gauche + 1;
-		$this->posxweightvol = $this->page_largeur - $this->marge_droite - 82;
-		$this->posxqtyordered = $this->page_largeur - $this->marge_droite - 60;
-		$this->posxqtytoship = $this->page_largeur - $this->marge_droite - 28;
-		$this->posxpuht = $this->page_largeur - $this->marge_droite;
+		// Define position of columns: Description | (Picture) | U.P. HT | QTY (Ordered) | TOTAL HT
+		$this->posxdesc = $this->marge_gauche + 1; // Old $this->posxdesc
 
-		if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {	// Show also the prices
-			$this->posxweightvol = $this->page_largeur - $this->marge_droite - 118;
-			$this->posxqtyordered = $this->page_largeur - $this->marge_droite - 96;
-			$this->posxqtytoship = $this->page_largeur - $this->marge_droite - 68;
-			$this->posxpuht = $this->page_largeur - $this->marge_droite - 40;
-			$this->posxtotalht = $this->page_largeur - $this->marge_droite - 20;
+		// Define target column widths
+		$unitprice_col_w = 20; // Width for Unit Price HT column
+		$qty_col_w = 15;       // Width for QTY (Ordered) column
+		$totalht_col_w = 25;   // Width for TOTAL HT column
+		$picture_col_w = getDolGlobalInt('MAIN_DOCUMENTS_WITH_PICTURE_WIDTH', 20);
+
+		// Determine X positions from right to left
+		if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
+			// Prices are shown: Desc | (Pic) | U.P. HT | QTY | TOTAL HT
+			$this->posxtotalht = $this->page_largeur - $this->marge_droite - $totalht_col_w;
+			$this->posxqtyordered = $this->posxtotalht - $qty_col_w; // This is the new 'QTY (Ordered)' column pos
+			$this->posxpuht = $this->posxqtyordered - $unitprice_col_w; // This is the new 'U.P. HT' column pos (using old var name for now)
+			$start_of_right_block = $this->posxpuht;
+		} else {
+			// Prices are NOT shown: Desc | (Pic) | QTY
+			$this->posxqtyordered = $this->page_largeur - $this->marge_droite - $qty_col_w; // 'QTY (Ordered)' is rightmost
+			$start_of_right_block = $this->posxqtyordered;
+			// Ensure price column positions are set to avoid errors if accessed, effectively hidden
+			$this->posxpuht = $this->posxqtyordered;
+			$this->posxtotalht = $this->posxqtyordered;
 		}
 
-		if (getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) {
-			$this->posxweightvol = $this->posxqtyordered;
-		}
-
-		$this->posxpicture = $this->posxweightvol - getDolGlobalInt('MAIN_DOCUMENTS_WITH_PICTURE_WIDTH', 20); // width of images
-
-		// To work with US executive format
-		if ($this->page_largeur < 210) {
-			$this->posxweightvol -= 20;
-			$this->posxpicture -= 20;
-			$this->posxqtyordered -= 20;
-			$this->posxqtytoship -= 20;
-		}
-
+		// Handle hiding the 'QTY (Ordered)' column (if SHIPPING_PDF_HIDE_ORDERED is true)
 		if (getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
-			$this->posxweightvol += ($this->posxqtytoship - $this->posxqtyordered);
-			$this->posxpicture += ($this->posxqtytoship - $this->posxqtyordered);
-			$this->posxqtyordered = $this->posxqtytoship;
+			if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
+				// QTY (Ordered) was between U.P. HT and TOTAL HT.
+				// U.P. HT now effectively extends to where TOTAL HT starts.
+				$this->posxqtyordered = $this->posxtotalht; // Makes QTY (Ordered) zero-width
+				// The column before it (U.P. HT) now uses space up to TOTAL HT.
+				// $start_of_right_block for picture calculation should be based on U.P. HT if QTY is hidden
+				$start_of_right_block = $this->posxpuht;
+			} else {
+				// QTY (Ordered) was the only data column. Hiding it means Description fills the page.
+				$this->posxqtyordered = $this->page_largeur - $this->marge_droite;
+				$start_of_right_block = $this->posxqtyordered;
+			}
+		}
+		
+		// Picture column position (to the left of the data column block)
+		// $this->atleastonephoto is determined in write_file, so we check MAIN_GENERATE_SHIPMENT_WITH_PICTURE here for layout planning
+		if (getDolGlobalString('MAIN_GENERATE_SHIPMENT_WITH_PICTURE')) {
+			$this->posxpicture = $start_of_right_block - $picture_col_w;
+		} else {
+			$this->posxpicture = $start_of_right_block; // No picture column space, Description extends to data columns
+		}
+		
+		// 'posxweightvol' is the legacy variable that used to define the end of description / start of first data column (if no picture).
+		// It should now point to where the picture column starts (if pictures are shown) or where the first data column starts.
+		$this->posxweightvol = $this->posxpicture; // This correctly sets the end of the description area.
+
+		// QtyToShip column is removed.
+		$this->posxqtytoship = $this->posxqtyordered; // Effectively hide by making it same as QtyOrdered start.
+
+		// Adjustments for narrow page formats (e.g., US Executive)
+		// This shifts all right-hand columns and picture column further left.
+		if ($this->page_largeur < 200) {
+			$reduction = 10; 
+			if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
+				$this->posxtotalht += $reduction;
+				$this->posxpuht += $reduction;
+			}
+			$this->posxqtyordered += $reduction;
+			$this->posxpicture += $reduction;
+			$this->posxweightvol += $reduction; // Keep consistent with posxpicture
+			$this->posxqtytoship += $reduction;
 		}
 
 		if ($mysoc === null) {
@@ -176,6 +211,9 @@ class pdf_rouget extends ModelePdfExpedition
 	{
 		// phpcs:enable
 		global $user, $conf, $langs, $hookmanager;
+
+        // Initialize grand total
+        $this->calculated_grand_total_ht = 0.0;
 
 		$object->fetch_thirdparty();
 
@@ -334,12 +372,16 @@ class pdf_rouget extends ModelePdfExpedition
 					$pdf->useTemplate($tplidx);
 				}
 				$pagenb++;
-				$top_shift = $this->_pagehead($pdf, $object, 1, $outputlangs);
+				// $top_shift = $this->_pagehead($pdf, $object, 1, $outputlangs); // Old call
+				$pagehead_data = $this->_pagehead($pdf, $object, 1, $outputlangs, $outputlangsbis); // Pass $outputlangsbis
+				$top_shift = $pagehead_data['top_shift'];
+				// $shipp_shift = $pagehead_data['shipp_shift']; // Store if needed later, not currently used in this write_file after top_shift is used for tab_top_newpage
 				$pdf->SetFont('', '', $default_font_size - 1);
 				$pdf->MultiCell(0, 3, ''); // Set interline to 3
 				$pdf->SetTextColor(0, 0, 0);
 
 				$tab_top = 90;	// position of top tab
+				// $tab_top_newpage calculation relies on $top_shift being a number.
 				$tab_top_newpage = (!getDolGlobalInt('MAIN_PDF_DONOTREPEAT_HEAD') ? 42 + $top_shift : 10);
 
 				$tab_height = $this->page_hauteur - $tab_top - $heightforfooter - $heightforfreetext;
@@ -422,7 +464,8 @@ class pdf_rouget extends ModelePdfExpedition
 					$height_note = 0;
 				}
 
-				// Show barcode
+				// Show barcode - REMOVED
+				/*
 				$height_barcode = 0;
 				//$pdf->Rect($this->marge_gauche, $this->marge_haute, $this->page_largeur-$this->marge_gauche-$this->marge_droite, 30);
 				if (isModEnabled('barcode') && getDolGlobalString('BARCODE_ON_SHIPPING_PDF')) {
@@ -456,6 +499,7 @@ class pdf_rouget extends ModelePdfExpedition
 						$this->error = 'Failed to generate barcode';
 					}
 				}
+				*/
 
 
 				$iniY = $tab_top + 7;
@@ -575,45 +619,75 @@ class pdf_rouget extends ModelePdfExpedition
 
 					$pdf->SetFont('', '', $default_font_size - 1); // We reposition the default font
 
-					// weight
+					// Weight and Volume data printing is removed.
+					// QtyToShip column is removed.
 
-					$pdf->SetXY($this->posxweightvol, $curY);
-					$weighttxt = '';
-					if (empty($object->lines[$i]->fk_product_type) && $object->lines[$i]->weight) {
-						$weighttxt = round($object->lines[$i]->weight * $object->lines[$i]->qty_shipped, getDolGlobalInt('SHIPMENT_ROUND_WEIGHT_ON_PDF', 5)).' '.measuringUnitString(0, "weight", $object->lines[$i]->weight_units, 1);
-					}
-					$voltxt = '';
-					if (empty($object->lines[$i]->fk_product_type) && $object->lines[$i]->volume && !getDolGlobalString('SHIPPING_PDF_HIDE_VOLUME')) {
-						$voltxt = round($object->lines[$i]->volume * $object->lines[$i]->qty_shipped, getDolGlobalInt('SHIPMENT_ROUND_VOLUME_ON_PDF', 5)).' '.measuringUnitString(0, "volume", $object->lines[$i]->volume_units ? $object->lines[$i]->volume_units : 0, 1);
-					}
-
-					if (!getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) {
-						$pdf->writeHTMLCell($this->posxqtyordered - $this->posxweightvol + 2, 3, $this->posxweightvol - 1, $curY, $weighttxt.(($weighttxt && $voltxt) ? '<br>' : '').$voltxt, 0, 0, false, true, 'C');
-						//$pdf->MultiCell(($this->posxqtyordered - $this->posxweightvol), 3, $weighttxt.(($weighttxt && $voltxt)?'<br>':'').$voltxt,'','C');
-					}
-
-					if (!getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
-						$pdf->SetXY($this->posxqtyordered, $curY);
-						$pdf->MultiCell(($this->posxqtytoship - $this->posxqtyordered), 3, $object->lines[$i]->qty_asked, '', 'C');
-					}
-
-					if (!getDolGlobalString('SHIPPING_PDF_HIDE_QTYTOSHIP')) {
-						$pdf->SetXY($this->posxqtytoship, $curY);
-						$pdf->MultiCell(($this->posxpuht - $this->posxqtytoship), 3, $object->lines[$i]->qty_shipped, '', 'C');
-					}
+					// Fetch price data from origin order line for U.P. HT and TOTAL HT
+					$unit_price_ht_text = '';
+					$total_line_ht_text = '';
+					// QTY (Ordered) - use qty_asked from expedition line
+					$line_qty_ordered = $object->lines[$i]->qty_asked;
 
 					if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
-						$pdf->SetXY($this->posxpuht, $curY);
-						$pdf->MultiCell(($this->posxtotalht - $this->posxpuht - 1), 3, price($object->lines[$i]->subprice, 0, $outputlangs), '', 'R');
+						if (!class_exists('CommandeDet')) {
+							require_once DOL_DOCUMENT_ROOT.'/commande/class/commandedet.class.php';
+						}
+						$order_line = new CommandeDet($this->db);
+						
+						// Determine the correct field name for the link to the order line ID
+						// fk_origin_line is common for expeditiondet linking to commandedet
+						$origin_line_fk_field = 'fk_origin_line'; // Default assumption
+						// Add more checks if needed for different Dolibarr versions or specific contexts if this fails
+						// For example, some modules might use 'origin_line_id' or directly 'fk_commandedet'
 
+						if (!empty($object->lines[$i]->{$origin_line_fk_field}) && $object->lines[$i]->{$origin_line_fk_field} > 0) {
+							if ($order_line->fetch($object->lines[$i]->{$origin_line_fk_field}) > 0) {
+								$unit_price_ht_text = price($order_line->subprice, 0, $outputlangs);
+								$total_line_ht_text = price($order_line->total_ht, 0, $outputlangs);
+                                // Accumulate grand total
+                                if (is_numeric($order_line->total_ht)) {
+                                    $this->calculated_grand_total_ht += $order_line->total_ht;
+                                }
+								// If qty_asked on expedition line can be zero/incorrect, you might prefer order_line->qty
+								// $line_qty_ordered = $order_line->qty; 
+							} else {
+								dol_syslog("pdf_rouget: Failed to fetch order_line with id: ".$object->lines[$i]->{$origin_line_fk_field}, LOG_WARNING);
+							}
+						} else {
+							dol_syslog("pdf_rouget: Missing origin_line_fk_field for expedition line: ".$object->lines[$i]->rowid, LOG_DEBUG);
+						}
+					}
+                    
+                    // Print data for new column structure: (Pic) | U.P. HT | QTY (Ordered) | TOTAL HT
+					if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
+						// U.P. HT Column
+						$pdf->SetXY($this->posxpuht, $curY); // posxpuht is start of Unit Price column
+						$pdf->MultiCell($this->posxqtyordered - $this->posxpuht -1, 3, $unit_price_ht_text, '', 'R');
+
+						// QTY (Ordered) Column - only if not hidden
+						if (!getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
+							$pdf->SetXY($this->posxqtyordered, $curY);
+							$pdf->MultiCell($this->posxtotalht - $this->posxqtyordered -1, 3, $line_qty_ordered, '', 'C');
+						}
+						
+						// TOTAL HT Column
 						$pdf->SetXY($this->posxtotalht, $curY);
-						$pdf->MultiCell(($this->page_largeur - $this->marge_droite - $this->posxtotalht), 3, price($object->lines[$i]->total_ht, 0, $outputlangs), '', 'R');
+						// Width: from start of total_ht column to page margin (minus 1 for padding)
+						$pdf->MultiCell($this->page_largeur - $this->marge_droite - $this->posxtotalht, 3, $total_line_ht_text, '', 'R');
+					} else {
+						// Prices are NOT shown: only QTY (Ordered) column might be shown after Description/Picture
+						if (!getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
+							$pdf->SetXY($this->posxqtyordered, $curY);
+							// Width: from start of qty_ordered column to page margin (minus 1 for padding)
+							$pdf->MultiCell($this->page_largeur - $this->marge_droite - $this->posxqtyordered, 3, $line_qty_ordered, '', 'C');
+						}
 					}
-
-					$nexY += 3;
-					if ($weighttxt && $voltxt) {
-						$nexY += 2;
-					}
+					// $nexY should be updated based on the actual Y after printing these cells
+					// Taking max of current nexY (from desc/pic) and Y after these multicells
+					$nexY = max($nexY, $pdf->GetY());
+					$nexY += 2; // Add small space before potential dashed line / next item
+					// Original logic: $nexY += 3; and then another +2 if weighttxt&voltxt.
+					// Let's simplify to a consistent small space.
 
 					// Add line
 					if (getDolGlobalString('MAIN_PDF_DASH_BETWEEN_LINES') && $i < ($nblines - 1)) {
@@ -779,48 +853,78 @@ class pdf_rouget extends ModelePdfExpedition
 			$totalVolumetoshow = showDimensionInBestUnit($object->trueVolume, $object->volume_units, "volume", $outputlangs);
 		}
 
-		$pdf->SetFillColor(255, 255, 255);
-		$pdf->SetXY($col1x, $tab2_top + $tab2_hl * $index);
-		$pdf->MultiCell($col2x - $col1x, $tab2_hl, $outputlangs->transnoentities("Total"), 0, 'L', 1);
+		// $pdf->SetFillColor(255, 255, 255); // White background is default
+		// $pdf->SetXY($col1x, $tab2_top + $tab2_hl * $index);
+		// $pdf->MultiCell($col2x - $col1x, $tab2_hl, $outputlangs->transnoentities("Total"), 0, 'L', 1);
 
-		if (!getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
-			$pdf->SetXY($this->posxqtyordered, $tab2_top + $tab2_hl * $index);
-			$pdf->MultiCell($this->posxqtytoship - $this->posxqtyordered, $tab2_hl, $totalOrdered, 0, 'C', 1);
-		}
+		// Remove old Qty Ordered and Qty Shipped totals display from here
+		// if (!getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) { ... }
+		// if (!getDolGlobalString('SHIPPING_PDF_HIDE_QTYTOSHIP')) { ... }
 
-		if (!getDolGlobalString('SHIPPING_PDF_HIDE_QTYTOSHIP')) {
-			$pdf->SetXY($this->posxqtytoship, $tab2_top + $tab2_hl * $index);
-			$pdf->MultiCell($this->posxpuht - $this->posxqtytoship, $tab2_hl, $totalToShip, 0, 'C', 1);
-		}
+		// Weight and Volume totals can remain if desired and if columns were not fully removed logically
+		// For now, assuming Weight/Vol totals are also not primary focus after column removal.
+		// if (!getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) { ... }
 
+
+		// Add Grand Total HT display
 		if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
-			$pdf->SetXY($this->posxpuht, $tab2_top + $tab2_hl * $index);
-			$pdf->MultiCell($this->posxtotalht - $this->posxpuht, $tab2_hl, '', 0, 'C', 1);
+			$index++; // Ensure it's on a new line
+			$pdf->SetFillColor(230, 230, 230); 
+			$pdf->SetFont('', 'B', $default_font_size); // Bold for grand total
 
-			$pdf->SetXY($this->posxtotalht, $tab2_top + $tab2_hl * $index);
-			$pdf->MultiCell($this->page_largeur - $this->marge_droite - $this->posxtotalht, $tab2_hl, price($object->total_ht, 0, $outputlangs), 0, 'C', 1);
-		}
-
-		if (!getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) {
-			// Total Weight
-			if ($totalWeighttoshow) {
-				$pdf->SetXY($this->posxweightvol, $tab2_top + $tab2_hl * $index);
-				$pdf->MultiCell(($this->posxqtyordered - $this->posxweightvol), $tab2_hl, $totalWeighttoshow, 0, 'C', 1);
-
-				$index++;
+			// Initialize if not done in write_file yet (placeholder for now)
+			if (!isset($this->calculated_grand_total_ht)) {
+				$this->calculated_grand_total_ht = 0.0; 
+				// Actual calculation should happen in write_file by summing line->total_ht
+				// For display here, if $object->total_ht is available and reliable, it could be a fallback.
+				// However, summing manually from fetched lines is more accurate if line prices are from orders.
+				// Example: Sum $order_line->total_ht in write_file's loop into $this->calculated_grand_total_ht
+                if (isset($object->total_ht)) { // Fallback if direct sum is not yet implemented in write_file
+                    // This is a temporary fallback, sum from lines is preferred.
+                    // $this->calculated_grand_total_ht = $object->total_ht;
+                    // To properly sum from lines, the accumulation must happen in write_file
+                    // For now, let's ensure write_file populates this. If it's zero, it means not summed or zero.
+                }
 			}
-			if ($totalVolumetoshow) {
-				$pdf->SetXY($this->posxweightvol, $tab2_top + $tab2_hl * $index);
-				$pdf->MultiCell(($this->posxqtyordered - $this->posxweightvol), $tab2_hl, $totalVolumetoshow, 0, 'C', 1);
 
-				$index++;
-			}
-			if (!$totalWeighttoshow && !$totalVolumetoshow) {
-				$index++;
-			}
+			$label_grand_total = $outputlangs->transnoentities("TotalNetHT");
+			$value_grand_total = price(isset($this->calculated_grand_total_ht) ? $this->calculated_grand_total_ht : 0, 0, $outputlangs);
+
+			// Position Grand Total label and value.
+			// Label from somewhat left, value aligned to the right of the table.
+			// Use $this->posxpuht as a reference for where price-related totals might start.
+			// This is a simplified positioning. A more robust way would use defined positions for total labels/values.
+			$gt_label_posx = $this->marge_gauche + (($this->posxpuht - $this->marge_gauche) / 2) ; // Approx middle of desc area
+            if ($this->posxpuht <= $this->marge_gauche) $gt_label_posx = $this->marge_gauche + 70; // Fallback if no price col
+			$gt_value_posx = $this->posxtotalht > 0 ? $this->posxtotalht -1 : $this->page_largeur - $this->marge_droite - 50; // Approx start of last value col
+            $gt_label_width = $gt_value_posx - $gt_label_posx -1;
+            $gt_value_width = $this->page_largeur - $this->marge_droite - $gt_value_posx;
+
+
+			if ($gt_label_width < 10) { // If columns are very compressed, adjust label position
+                $gt_label_width = 50; // Minimum label width
+                $gt_label_posx = $gt_value_posx - $gt_label_width -1;
+            }
+            if ($gt_value_width < 20) { // Ensure value has some space
+                $gt_value_width = 20;
+                $gt_value_posx = $this->page_largeur - $this->marge_droite - $gt_value_width;
+                if ($gt_label_posx + $gt_label_width > $gt_value_posx) { // Prevent overlap
+                    $gt_label_width = $gt_value_posx - $gt_label_posx -1;
+                }
+            }
+
+
+			$pdf->SetXY($gt_label_posx, $tab2_top + $tab2_hl * $index);
+			$pdf->MultiCell($gt_label_width, $tab2_hl, $label_grand_total, 0, 'R', 1); // No border, align R, fill
+
+			$pdf->SetXY($gt_value_posx, $tab2_top + $tab2_hl * $index);
+			$pdf->MultiCell($gt_value_width, $tab2_hl, $value_grand_total, 0, 'R', 1); // No border, align R, fill
+			
+			$index++; 
 		}
 
 		$pdf->SetTextColor(0, 0, 0);
+		$pdf->SetFont('', '', $default_font_size -1); // Reset font
 
 		return ($tab2_top + ($tab2_hl * $index));
 	}
@@ -862,309 +966,484 @@ class pdf_rouget extends ModelePdfExpedition
 		$pdf->SetFont('', '', $default_font_size - 1);
 
 		// Description
-		if (empty($hidetop)) {
+		if (empty($hidetop)) { // Draw headers only if not hidetop
+			// Top line of table header
 			$pdf->line($this->marge_gauche, $tab_top + 5, $this->page_largeur - $this->marge_droite, $tab_top + 5);
 
-			$pdf->SetXY($this->posxdesc - 1, $tab_top + 1);
-			$pdf->MultiCell($this->posxqtyordered - $this->posxdesc, 2, $outputlangs->transnoentities("Description"), '', 'L');
-		}
+			// Description Header
+			$pdf->SetXY($this->posxdesc -1, $tab_top + 1);
+			// $this->posxweightvol is now set in constructor to be the start of the first column after description/picture
+			$pdf->MultiCell($this->posxweightvol - ($this->posxdesc -1) , 2, $outputlangs->transnoentities("Description"), '', 'L');
 
-		if (!getDolGlobalString('SHIPPING_PDF_HIDE_WEIGHT_AND_VOLUME')) {
-			$pdf->line($this->posxweightvol - 1, $tab_top, $this->posxweightvol - 1, $tab_top + $tab_height);
-			if (empty($hidetop)) {
-				$pdf->SetXY($this->posxweightvol - 1, $tab_top + 1);
-				$pdf->MultiCell(($this->posxqtyordered - $this->posxweightvol), 2, $outputlangs->transnoentities("WeightVolShort"), '', 'C');
-			}
-		}
+			// Vertical line after Description/Picture block (left of the first data column)
+			// This is at $this->posxweightvol -1 (which is $this->posx_picture -1 or $start_of_right_block -1 from constructor)
+			$pdf->line($this->posxweightvol -1, $tab_top, $this->posxweightvol -1, $tab_top + $tab_height);
 
-		if (!getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
-			$pdf->line($this->posxqtyordered - 1, $tab_top, $this->posxqtyordered - 1, $tab_top + $tab_height);
-			if (empty($hidetop)) {
-				$pdf->SetXY($this->posxqtyordered - 1, $tab_top + 1);
-				$pdf->MultiCell(($this->posxqtytoship - $this->posxqtyordered), 2, $outputlangs->transnoentities("QtyOrdered"), '', 'C');
-			}
-		}
+			// Conditional Headers for Price and QTY columns
+			if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
+				// U.P. HT Header
+				$pdf->SetXY($this->posxpuht -1, $tab_top + 1); // posxpuht is start of Unit Price
+				$pdf->MultiCell($this->posxqtyordered - $this->posxpuht, 2, $outputlangs->transnoentities("PriceUHT"), '', 'C');
+				// Line after U.P. HT (left of QTY)
+				$pdf->line($this->posxqtyordered -1, $tab_top, $this->posxqtyordered -1, $tab_top + $tab_height);
 
-		if (!getDolGlobalString('SHIPPING_PDF_HIDE_QTYTOSHIP')) {
-			$pdf->line($this->posxqtytoship - 1, $tab_top, $this->posxqtytoship - 1, $tab_top + $tab_height);
-			if (empty($hidetop)) {
-				$pdf->SetXY($this->posxqtytoship, $tab_top + 1);
-				$pdf->MultiCell(($this->posxpuht - $this->posxqtytoship), 2, $outputlangs->transnoentities("QtyToShip"), '', 'C');
-			}
-		}
-
-		if (getDolGlobalString('SHIPPING_PDF_DISPLAY_AMOUNT_HT')) {
-			$pdf->line($this->posxpuht - 1, $tab_top, $this->posxpuht - 1, $tab_top + $tab_height);
-			if (empty($hidetop)) {
-				$pdf->SetXY($this->posxpuht - 1, $tab_top + 1);
-				$pdf->MultiCell(($this->posxtotalht - $this->posxpuht), 2, $outputlangs->transnoentities("PriceUHT"), '', 'C');
-			}
-
-			$pdf->line($this->posxtotalht - 1, $tab_top, $this->posxtotalht - 1, $tab_top + $tab_height);
-			if (empty($hidetop)) {
-				$pdf->SetXY($this->posxtotalht - 1, $tab_top + 1);
-				$pdf->MultiCell(($this->page_largeur - $this->marge_droite - $this->posxtotalht), 2, $outputlangs->transnoentities("TotalHT"), '', 'C');
+				// QTY (Ordered) Header - only if not hidden
+				if (!getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
+					$pdf->SetXY($this->posxqtyordered -1, $tab_top + 1);
+					$pdf->MultiCell($this->posxtotalht - $this->posxqtyordered, 2, $outputlangs->transnoentities("QtyOrdered"), '', 'C'); // Using "QtyOrdered" for clarity, can be "QTY"
+					// Line after QTY (left of TOTAL HT)
+					$pdf->line($this->posxtotalht -1, $tab_top, $this->posxtotalht -1, $tab_top + $tab_height);
+				} else {
+					// If QTY is hidden, the line after U.P. HT is effectively the line before TOTAL HT.
+					// This means the line at $this->posxqtyordered-1 (which equals $this->posxtotalht-1 if QTY hidden) is the correct one.
+				}
+				
+				// TOTAL HT Header
+				$pdf->SetXY($this->posxtotalht -1, $tab_top + 1);
+				$pdf->MultiCell($this->page_largeur - $this->marge_droite - ($this->posxtotalht -1), 2, $outputlangs->transnoentities("TotalHT"), '', 'C');
+				// No line after TOTAL HT as it's the last column.
+			} else {
+				// Prices are NOT shown: only QTY (Ordered) column might be shown after Description/Picture
+				if (!getDolGlobalString('SHIPPING_PDF_HIDE_ORDERED')) {
+					$pdf->SetXY($this->posxqtyordered -1, $tab_top + 1); // posxqtyordered is start of QTY column
+					$pdf->MultiCell($this->page_largeur - $this->marge_droite - ($this->posxqtyordered -1), 2, $outputlangs->transnoentities("QtyOrdered"), '', 'C');
+					// No line after the last column.
+				}
 			}
 		}
 	}
 
 	// phpcs:disable PEAR.NamingConventions.ValidFunctionName.PublicUnderscore
-	/**
-	 *  Show top header of page.
-	 *
-	 *  @param	TCPDF		$pdf     		Object PDF
-	 *  @param  Expedition	$object     	Object to show
-	 *  @param  int	    	$showaddress    0=no, 1=yes
-	 *  @param  Translate	$outputlangs	Object lang for output
-	 *  @return	float|int                   Return topshift value
-	 */
-	protected function _pagehead(&$pdf, $object, $showaddress, $outputlangs)
-	{
-		// phpcs:enable
-		global $conf, $langs, $mysoc;
+/**
+ * Show top header of page.
+ *
+ * @param TCPDF       $pdf            Object PDF
+ * @param Commande    $object         Object to show
+ * @param int         $showaddress    0=no, 1=yes
+ * @param Translate   $outputlangs    Object lang for output
+ * @param Translate   $outputlangsbis Object lang for output bis
+ * @param string      $titlekey       Translation key to show as title of document
+ * @return array<string, int|float>   top shift of linked object lines
+ */
+protected function _pagehead(&$pdf, $object, $showaddress, $outputlangs, $outputlangsbis = null, $titlekey = "PdfOrderTitle")
+{
+    // phpcs:enable
+    global $conf, $langs, $hookmanager, $mysoc;
 
-		$langs->load("orders");
+    $ltrdirection = 'L';
+    if ($outputlangs->trans("DIRECTION") == 'rtl') {
+        $ltrdirection = 'R';
+    }
 
-		$default_font_size = pdf_getPDFFontSize($outputlangs);
+    // Load translation files required by page
+    $outputlangs->loadLangs(array("main", "bills", "propal", "orders", "companies"));
 
-		pdf_pagehead($pdf, $outputlangs, $this->page_hauteur);
+    $default_font_size = pdf_getPDFFontSize($outputlangs);
 
-		//Prepare next
-		$pdf->SetTextColor(0, 0, 60);
-		$pdf->SetFont('', 'B', $default_font_size + 3);
+    pdf_pagehead($pdf, $outputlangs, $this->page_hauteur);
 
-		$w = 110;
+    $pdf->SetTextColor(0, 0, 60);
+    $pdf->SetFont('', 'B', $default_font_size + 3);
 
-		$posy = $this->marge_haute;
-		$posx = $this->page_largeur - $this->marge_droite - $w;
+    $posy = $this->marge_haute;
+    $posx = $this->marge_gauche;
+    $page_width = $this->page_largeur - $this->marge_gauche - $this->marge_droite;
 
-		$pdf->SetXY($this->marge_gauche, $posy);
+    // ===== LEFT COLUMN =====
 
-		// Logo
-		if ($this->emetteur->logo) {
-			$logodir = $conf->mycompany->dir_output;
-			if (!empty($conf->mycompany->multidir_output[$object->entity])) {
-				$logodir = $conf->mycompany->multidir_output[$object->entity];
-			}
-			if (!getDolGlobalInt('MAIN_PDF_USE_LARGE_LOGO')) {
-				$logo = $logodir.'/logos/thumbs/'.$this->emetteur->logo_small;
-			} else {
-				$logo = $logodir.'/logos/'.$this->emetteur->logo;
-			}
-			if (is_readable($logo)) {
-				$height = pdf_getHeightForLogo($logo);
-				$pdf->Image($logo, $this->marge_gauche, $posy, 0, $height); // width=0 (auto)
-			} else {
-				$pdf->SetTextColor(200, 0, 0);
-				$pdf->SetFont('', 'B', $default_font_size - 2);
-				$pdf->MultiCell($w, 3, $outputlangs->transnoentities("ErrorLogoFileNotFound", $logo), 0, 'L');
-				$pdf->MultiCell($w, 3, $outputlangs->transnoentities("ErrorGoToGlobalSetup"), 0, 'L');
-			}
-		} else {
-			$text = $this->emetteur->name;
-			$pdf->MultiCell($w, 4, $outputlangs->convToOutputCharset($text), 0, 'L');
-		}
+    // Company Logo Section (aligned left)
+    if (!getDolGlobalInt('PDF_DISABLE_MYCOMPANY_LOGO')) {
+        if ($this->emetteur->logo) {
+            $logodir = $conf->mycompany->dir_output;
+            if (!empty(getMultidirOutput($mysoc, 'mycompany'))) {
+                $logodir = getMultidirOutput($mysoc, 'mycompany');
+            }
+            $logo = !getDolGlobalInt('MAIN_PDF_USE_LARGE_LOGO') ? $logodir . '/logos/thumbs/' . $this->emetteur->logo_small : $logodir . '/logos/' . $this->emetteur->logo;
+            if (is_readable($logo)) {
+                $height = pdf_getHeightForLogo($logo);
+                $logo_width = 70; // Increased size for bigger logo
+                $pdf->Image($logo, $this->marge_gauche, $posy, $logo_width, $height); // Aligned left
+                $posy += $height + 2; // Reduced more spacing after logo
+            } else {
+                $pdf->SetTextColor(200, 0, 0);
+                $pdf->SetFont('', 'B', $default_font_size - 2);
+                $pdf->SetXY($this->marge_gauche, $posy);
+                $pdf->MultiCell($page_width / 2, 3, $outputlangs->transnoentities("ErrorLogoFileNotFound", $logo), 0, 'L');
+                $pdf->MultiCell($page_width / 2, 3, $outputlangs->transnoentities("ErrorGoToGlobalSetup"), 0, 'L');
+                $posy += 10; // Reduced spacing
+            }
+        } else {
+            $pdf->SetFont('', 'B', $default_font_size + 2);
+            $pdf->SetXY($this->marge_gauche, $posy);
+            $pdf->MultiCell($page_width / 2, 4, $outputlangs->convToOutputCharset($this->emetteur->name), 0, 'L');
+            $posy += 6; // Reduced spacing
+        }
+    }
 
-		$pdf->SetDrawColor(128, 128, 128);
+    // Company Information
+    $pdf->SetFont('', 'B', $default_font_size);
+    $pdf->SetXY($this->marge_gauche, $posy);
+    $pdf->MultiCell($page_width / 2, 3, $outputlangs->convToOutputCharset($this->emetteur->name), 0, 'L'); // Reduced line height
+    $posy += 3; // Reduced spacing
 
-		$posx = $this->page_largeur - $w - $this->marge_droite;
-		$posy = $this->marge_haute;
+    // Website URL
+    $pdf->SetFont('', '', $default_font_size - 1);
+    $pdf->SetXY($this->marge_gauche, $posy);
+    $pdf->MultiCell($page_width / 2, 3, 'www.informatics-dz.com', 0, 'L'); // Reduced line height
+    $posy += 3; // Reduced spacing
 
-		$pdf->SetFont('', 'B', $default_font_size + 2);
-		$pdf->SetXY($posx, $posy);
-		$pdf->SetTextColor(0, 0, 60);
-		$title = $outputlangs->transnoentities("SendingSheet");
-		$pdf->MultiCell($w, 4, $title, '', 'R');
+    // Add full-width box with the new text
+$pdf->SetFillColor(230, 230, 230); // Light gray background
+$pdf->Rect($this->marge_gauche, $posy, $page_width, 8, 'F'); // Full width box, height 8mm
 
-		$pdf->SetFont('', '', $default_font_size + 1);
+// Set font to support Arabic (e.g., aealarabiya or dejavusans)
+$pdf->SetFont('aealarabiya', '', $default_font_size + 1); // Slightly reduced font size
+$pdf->SetXY($this->marge_gauche, $posy + 1); // Adjusted Y for text in box
+$pdf->MultiCell($page_width, 4, $outputlangs->convToOutputCharset('CERTIFICAT DE GARANTIE                     الضمان شهادة'), 0, 'C'); // Reduced line height
+$posy += 8; // Space after box (just height of box)
 
-		$posy += 5;
+    // ===== RIGHT COLUMN =====
 
-		$pdf->SetXY($posx, $posy);
-		$pdf->SetTextColor(0, 0, 60);
-		$pdf->MultiCell($w, 4, $outputlangs->transnoentities("RefSending")." : ".$object->ref, '', 'R');
+    $w = 100;
+    $posx_right = $this->page_largeur - $this->marge_droite - $w; // Renamed for clarity
+    $right_posy = $this->marge_haute;
 
-		// Date planned delivery
-		if (!empty($object->date_delivery)) {
-			$posy += 4;
-			$pdf->SetXY($posx, $posy);
-			$pdf->SetTextColor(0, 0, 60);
-			$pdf->MultiCell($w, 4, $outputlangs->transnoentities("DateDeliveryPlanned")." : ".dol_print_date($object->date_delivery, "day", false, $outputlangs, true), '', 'R');
-		}
+    // Document title and reference
+    $pdf->SetFont('', 'B', $default_font_size + 3);
+    $pdf->SetXY($posx_right, $right_posy);
+    $pdf->SetTextColor(0, 0, 60);
+    $title = $outputlangs->transnoentities("SendingSheet");
+    if (getDolGlobalInt('PDF_USE_ALSO_LANGUAGE_CODE') && is_object($outputlangsbis)) {
+        $title .= ' - ';
+        $title .= $outputlangsbis->transnoentities("SendingSheet");
+    }
+    $title .= ' ' . $outputlangs->convToOutputCharset($object->ref);
+    if ($object->statut == $object::STATUS_DRAFT) {
+        $pdf->SetTextColor(128, 0, 0);
+        $title .= ' - ' . $outputlangs->transnoentities("NotValidated");
+    }
+    $pdf->MultiCell($w, 3, $title, '', 'R');
+    $right_posy = $pdf->getY() + 3; // Reduced spacing
 
-		if (!getDolGlobalString('MAIN_PDF_HIDE_CUSTOMER_CODE') && !empty($object->thirdparty->code_client)) {
-			$posy += 4;
-			$pdf->SetXY($posx, $posy);
-			$pdf->SetTextColor(0, 0, 60);
-			$pdf->MultiCell($w, 3, $outputlangs->transnoentities("CustomerCode")." : ".$outputlangs->transnoentities($object->thirdparty->code_client), '', 'R');
-		}
+    // Reference info
+    $pdf->SetFont('', '', $default_font_size - 1);
+    $pdf->SetTextColor(0, 0, 60);
 
-		if (!getDolGlobalString('MAIN_PDF_HIDE_CUSTOMER_ACCOUNTING_CODE') && !empty($object->thirdparty->code_compta_client)) {
-			$posy += 4;
-			$pdf->SetXY($posx, $posy);
-			$pdf->SetTextColor(0, 0, 60);
-			$pdf->MultiCell($w, 3, $outputlangs->transnoentities("CustomerAccountancyCode")." : ".$outputlangs->transnoentities($object->thirdparty->code_compta_client), '', 'R');
-		}
+    if ($object->ref_client) {
+        $pdf->SetXY($posx_right, $right_posy);
+        $pdf->MultiCell($w, 3, $outputlangs->transnoentities("RefCustomer") . " : " .
+                       dol_trunc($outputlangs->convToOutputCharset($object->ref_client), 65), '', 'R');
+        $right_posy += 3; // Reduced spacing
+    }
 
-		$pdf->SetFont('', '', $default_font_size + 3);
-		$Yoff = 25;
+    if (getDolGlobalInt('PDF_SHOW_PROJECT_TITLE')) {
+        $object->fetchProject();
+        if (!empty($object->project->ref)) {
+            $pdf->SetXY($posx_right, $right_posy);
+            $pdf->MultiCell($w, 3, $outputlangs->transnoentities("Project") . " : " .
+                           (empty($object->project->title) ? '' : $object->project->title), '', 'R');
+            $right_posy += 3; // Reduced spacing
+        }
+    }
 
-		// Add list of linked orders
-		$origin = $object->origin;
-		$origin_id = $object->origin_id;
+    if (getDolGlobalInt('PDF_SHOW_PROJECT')) {
+        $object->fetchProject();
+        if (!empty($object->project->ref)) {
+            $outputlangs->load("projects");
+            $pdf->SetXY($posx_right, $right_posy);
+            $pdf->MultiCell($w, 3, $outputlangs->transnoentities("RefProject") . " : " .
+                           (empty($object->project->ref) ? '' : $object->project->ref), '', 'R');
+            $right_posy += 3; // Reduced spacing
+        }
+    }
 
-		$object->fetch_origin();
-
-		// TODO move to external function
-		if (isModEnabled($origin)) {     // commonly $origin='commande'
-			$outputlangs->load('orders');
-
-			$classname = ucfirst($origin);
-			$linkedobject = new $classname($this->db);
-			'@phan-var-force Commande|Facture $linkedobject';
-			$result = $linkedobject->fetch($origin_id);
-			if ($result >= 0) {
-				//$linkedobject->fetchObjectLinked()   Get all linked object to the $linkedobject (commonly order) into $linkedobject->linkedObjects
-
-				$pdf->SetFont('', '', $default_font_size - 2);
-				$text = $linkedobject->ref;
-				if (isset($linkedobject->ref_client) && !empty($linkedobject->ref_client)) {
-					$text .= ' ('.$linkedobject->ref_client.')';
-				}
-				$Yoff += 8;
-				$pdf->SetXY($this->page_largeur - $this->marge_droite - $w, $Yoff);
-				$pdf->MultiCell($w, 2, $outputlangs->transnoentities("RefOrder")." : ".$outputlangs->transnoentities($text), 0, 'R');
-				$Yoff += 3;
-				$pdf->SetXY($this->page_largeur - $this->marge_droite - $w, $Yoff);
-				$pdf->MultiCell($w, 2, $outputlangs->transnoentities("OrderDate")." : ".dol_print_date($linkedobject->date, "day", false, $outputlangs, true), 0, 'R');
-			}
-		}
-
-		$top_shift = 0;
-		// Show list of linked objects
-		/*
-		$current_y = $pdf->getY();
-		$posy = pdf_writeLinkedObjects($pdf, $object, $outputlangs, $posx, $posy, $w, 3, 'R', $default_font_size);
-		if ($current_y < $pdf->getY()) {
-			$top_shift = $pdf->getY() - $current_y;
-		}
-		*/
-
-		if ($showaddress) {
-			// Sender properties
-			$carac_emetteur = '';
-			// Add internal contact of origin element if defined
-			$arrayidcontact = array();
-			if (!empty($origin) && is_object($object->origin_object)) {
-				$arrayidcontact = $object->origin_object->getIdContact('internal', 'SALESREPFOLL');
-			}
-			if (is_array($arrayidcontact) && count($arrayidcontact) > 0) {
-				$object->fetch_user(reset($arrayidcontact));
-				$labelbeforecontactname = ($outputlangs->transnoentities("FromContactName") != 'FromContactName' ? $outputlangs->transnoentities("FromContactName") : $outputlangs->transnoentities("Name"));
-				$carac_emetteur .= ($carac_emetteur ? "\n" : '').$labelbeforecontactname.": ".$outputlangs->convToOutputCharset($object->user->getFullName($outputlangs));
-				$carac_emetteur .= (getDolGlobalInt('PDF_SHOW_PHONE_AFTER_USER_CONTACT') || getDolGlobalInt('PDF_SHOW_EMAIL_AFTER_USER_CONTACT')) ? ' (' : '';
-				$carac_emetteur .= (getDolGlobalInt('PDF_SHOW_PHONE_AFTER_USER_CONTACT') && !empty($object->user->office_phone)) ? $object->user->office_phone : '';
-				$carac_emetteur .= (getDolGlobalInt('PDF_SHOW_PHONE_AFTER_USER_CONTACT') && getDolGlobalInt('PDF_SHOW_EMAIL_AFTER_USER_CONTACT')) ? ', ' : '';
-				$carac_emetteur .= (getDolGlobalInt('PDF_SHOW_EMAIL_AFTER_USER_CONTACT') && !empty($object->user->email)) ? $object->user->email : '';
-				$carac_emetteur .= (getDolGlobalInt('PDF_SHOW_PHONE_AFTER_USER_CONTACT') || getDolGlobalInt('PDF_SHOW_EMAIL_AFTER_USER_CONTACT')) ? ')' : '';
-				$carac_emetteur .= "\n";
-			}
-
-			$carac_emetteur .= pdf_build_address($outputlangs, $this->emetteur, $object->thirdparty, '', 0, 'source', $object);
-
-			// Show sender
-			$posy = getDolGlobalString('MAIN_PDF_USE_ISO_LOCATION') ? 40 : 42;
-			$posx = $this->marge_gauche;
-			if (getDolGlobalString('MAIN_INVERT_SENDER_RECIPIENT')) {
-				$posx = $this->page_largeur - $this->marge_droite - 80;
-			}
-
-			$hautcadre = getDolGlobalString('MAIN_PDF_USE_ISO_LOCATION') ? 38 : 40;
-			$widthrecbox = getDolGlobalString('MAIN_PDF_USE_ISO_LOCATION') ? 92 : 82;
-
-			// Show sender frame
-			if (!getDolGlobalString('MAIN_PDF_NO_SENDER_FRAME')) {
-				$pdf->SetTextColor(0, 0, 0);
-				$pdf->SetFont('', '', $default_font_size - 2);
-				$pdf->SetXY($posx, $posy - 5);
-				$pdf->MultiCell($widthrecbox, 5, $outputlangs->transnoentities("Sender"), 0, 'L');
-				$pdf->SetXY($posx, $posy);
-				$pdf->SetFillColor(230, 230, 230);
-				$pdf->RoundedRect($posx, $posy, $widthrecbox, $hautcadre, $this->corner_radius, '1234', 'F');
-				$pdf->SetTextColor(0, 0, 60);
-				$pdf->SetFillColor(255, 255, 255);
-			}
-
-			// Show sender name
-			if (!getDolGlobalString('MAIN_PDF_HIDE_SENDER_NAME')) {
-				$pdf->SetXY($posx + 2, $posy + 3);
-				$pdf->SetFont('', 'B', $default_font_size);
-				$pdf->MultiCell($widthrecbox - 2, 4, $outputlangs->convToOutputCharset($this->emetteur->name), 0, 'L');
-				$posy = $pdf->getY();
-			}
-
-			// Show sender information
-			$pdf->SetXY($posx + 2, $posy);
-			$pdf->SetFont('', '', $default_font_size - 1);
-			$pdf->MultiCell($widthrecbox - 2, 4, $carac_emetteur, 0, 'L');
+    // Order date (using $object->date_creation or $object->date for expedition context)
+    $date_to_display = !empty($object->date_creation) ? $object->date_creation : $object->date;
+    $pdf->SetXY($posx_right, $right_posy);
+    $title_date = $outputlangs->transnoentities("Date"); // Generic "Date" for expedition context // Renamed to avoid conflict
+    if (getDolGlobalInt('PDF_USE_ALSO_LANGUAGE_CODE') && is_object($outputlangsbis)) {
+        $title_date .= ' - ' . $outputlangsbis->transnoentities("Date");
+    }
+    $pdf->MultiCell($w, 3, $title_date . " : " . dol_print_date($date_to_display, "day", false, $outputlangs, true), '', 'R');
+    $right_posy += 3; // Reduced spacing
 
 
-			// If SHIPPING contact defined, we use it
-			$usecontact = false;
-			$arrayidcontact = $object->origin_object->getIdContact('external', 'SHIPPING');
-			if (count($arrayidcontact) > 0) {
-				$usecontact = true;
-				$result = $object->fetch_contact($arrayidcontact[0]);
-			}
+    // Customer codes if enabled
+    if (!getDolGlobalString('MAIN_PDF_HIDE_CUSTOMER_CODE') && !empty($object->thirdparty->code_client)) {
+        $pdf->SetXY($posx_right, $right_posy);
+        $pdf->MultiCell($w, 3, $outputlangs->transnoentities("CustomerCode") . " : " .
+                       $outputlangs->transnoentities($object->thirdparty->code_client), '', 'R');
+        $right_posy += 3; // Reduced spacing
+    }
 
-			// Recipient name
-			if ($usecontact && ($object->contact->socid != $object->thirdparty->id && (!isset($conf->global->MAIN_USE_COMPANY_NAME_OF_CONTACT) || getDolGlobalString('MAIN_USE_COMPANY_NAME_OF_CONTACT')))) {
-				$thirdparty = $object->contact;
-			} else {
-				$thirdparty = $object->thirdparty;
-			}
+    if (!getDolGlobalString('MAIN_PDF_HIDE_CUSTOMER_ACCOUNTING_CODE') && !empty($object->thirdparty->code_compta_client)) {
+        $pdf->SetXY($posx_right, $right_posy);
+        $pdf->MultiCell($w, 3, $outputlangs->transnoentities("CustomerAccountancyCode") . " : " .
+                       $outputlangs->transnoentities($object->thirdparty->code_compta_client), '', 'R');
+        $right_posy += 3; // Reduced spacing
+    }
 
-			$carac_client_name = pdfBuildThirdpartyName($thirdparty, $outputlangs);
+    // Get contact
+    if (getDolGlobalInt('DOC_SHOW_FIRST_SALES_REP')) {
+        $arrayidcontact = array();
+        if (isset($object->origin_object) && is_object($object->origin_object)) {
+            $arrayidcontact = $object->origin_object->getIdContact('internal', 'SALESREPFOLL');
+        }
+        if (count($arrayidcontact) > 0) {
+            $usertmp = new User($this->db);
+            $usertmp->fetch($arrayidcontact[0]);
+            $pdf->SetXY($posx_right, $right_posy);
+            $pdf->MultiCell($w, 3, $outputlangs->transnoentities("SalesRepresentative") . " : " .
+                           $usertmp->getFullName($langs), '', 'R');
+            $right_posy += 3; // Reduced spacing
+        }
+    }
 
-			$carac_client = pdf_build_address($outputlangs, $this->emetteur, $object->thirdparty, (!empty($object->contact) ? $object->contact : null), ($usecontact ? 1 : 0), 'targetwithdetails', $object);
+    // ===== LINKED OBJECTS =====
 
-			// Show recipient
-			$widthrecbox = getDolGlobalString('MAIN_PDF_USE_ISO_LOCATION') ? 92 : 100;
-			if ($this->page_largeur < 210) {
-				$widthrecbox = 84; // To work with US executive format
-			}
-			$posy = getDolGlobalString('MAIN_PDF_USE_ISO_LOCATION') ? 40 : 42;
-			$posx = $this->page_largeur - $this->marge_droite - $widthrecbox;
-			if (getDolGlobalString('MAIN_INVERT_SENDER_RECIPIENT')) {
-				$posx = $this->marge_gauche;
-			}
+    $right_posy += 1; // Reduced spacing
+    $current_y = $pdf->getY(); // This should be $right_posy before the call
+    // Use $posx_right for X position of linked objects
+    $posy_ref = pdf_writeLinkedObjects($pdf, $object, $outputlangs, $posx_right, $right_posy, $w, 3, 'R', $default_font_size);
+    // $right_posy should be updated by $pdf->getY() after this call.
+    $new_right_posy = $pdf->getY();
+    if ($new_right_posy > $right_posy) { // If linked objects added height
+        $top_shift = $new_right_posy - $right_posy; // This is how much the right column content shifted due to linked objects
+        $right_posy = $new_right_posy;
+    } else { // If no linked objects or they didn't increase Y
+        $top_shift = 0;
+    }
 
-			// Show recipient frame
-			if (!getDolGlobalString('MAIN_PDF_NO_RECIPENT_FRAME')) {
-				$pdf->SetTextColor(0, 0, 0);
-				$pdf->SetFont('', '', $default_font_size - 2);
-				$pdf->SetXY($posx + 2, $posy - 5);
-				$pdf->MultiCell($widthrecbox, 5, $outputlangs->transnoentities("Recipient"), 0, 'L');
-				$pdf->RoundedRect($posx, $posy, $widthrecbox, $hautcadre, $this->corner_radius, '1234', 'D');
-			}
 
-			// Show recipient name
-			$pdf->SetXY($posx + 2, $posy + 3);
-			$pdf->SetFont('', 'B', $default_font_size);
-			$pdf->MultiCell($widthrecbox, 2, $carac_client_name, 0, 'L');
+    // ===== ADDRESS FRAMES =====
 
-			$posy = $pdf->getY();
+    if ($showaddress) {
+        // Calculate the start position for address frames
+        $address_start_y = max($posy, $right_posy) + 3; // Reduced extra space
 
-			// Show recipient information
-			$pdf->SetXY($posx + 2, $posy);
-			$pdf->SetFont('', '', $default_font_size - 1);
-			$pdf->MultiCell($widthrecbox, 4, $carac_client, 0, 'L');
-		}
+        // Sender properties
+        $carac_emetteur = '';
+        // Add internal contact of object if defined
+        // For expeditions, the relevant contact might be on the linked order or the expedition itself.
+        // We'll try to get it from the origin object if available.
+        $arrayidcontact = array();
+        if (isset($object->origin_object) && is_object($object->origin_object)) {
+             $arrayidcontact = $object->origin_object->getIdContact('internal', 'SALESREPFOLL');
+        }
 
-		$pdf->SetTextColor(0, 0, 0);
+        if (count($arrayidcontact) > 0) {
+            $user_contact_tmp = new User($this->db); // Use a temporary variable to avoid conflict if $object->user exists
+            $user_contact_tmp->fetch($arrayidcontact[0]);
+            $labelbeforecontactname = ($outputlangs->transnoentities("FromContactName") != 'FromContactName' ?
+                                      $outputlangs->transnoentities("FromContactName") :
+                                      $outputlangs->transnoentities("Name"));
+            $carac_emetteur .= ($carac_emetteur ? "\n" : '') . $labelbeforecontactname . " " .
+                              $outputlangs->convToOutputCharset($user_contact_tmp->getFullName($outputlangs));
+            $carac_emetteur .= (getDolGlobalInt('PDF_SHOW_PHONE_AFTER_USER_CONTACT') ||
+                              getDolGlobalInt('PDF_SHOW_EMAIL_AFTER_USER_CONTACT')) ? ' (' : '';
+            $carac_emetteur .= (getDolGlobalInt('PDF_SHOW_PHONE_AFTER_USER_CONTACT') &&
+                              !empty($user_contact_tmp->office_phone)) ? $user_contact_tmp->office_phone : '';
+            $carac_emetteur .= (getDolGlobalInt('PDF_SHOW_PHONE_AFTER_USER_CONTACT') &&
+                              getDolGlobalInt('PDF_SHOW_EMAIL_AFTER_USER_CONTACT') && !empty($user_contact_tmp->office_phone) && !empty($user_contact_tmp->email) ) ? ', ' : '';
+            $carac_emetteur .= (getDolGlobalInt('PDF_SHOW_EMAIL_AFTER_USER_CONTACT') &&
+                              !empty($user_contact_tmp->email)) ? $user_contact_tmp->email : '';
+            $carac_emetteur .= (getDolGlobalInt('PDF_SHOW_PHONE_AFTER_USER_CONTACT') ||
+                              getDolGlobalInt('PDF_SHOW_EMAIL_AFTER_USER_CONTACT')) ? ')' : '';
+            $carac_emetteur .= "\n";
+        }
 
-		return $top_shift;
-	}
+
+        $carac_emetteur .= pdf_build_address($outputlangs, $this->emetteur, $object->thirdparty, '', 0, 'source', $object);
+
+        // Show sender
+        $posy_address = $address_start_y; // Use a different variable for Y position of addresses
+        $posx_sender = $this->marge_gauche;
+        if (getDolGlobalInt('MAIN_INVERT_SENDER_RECIPIENT')) {
+            $posx_sender = $this->page_largeur - $this->marge_droite - 80;
+        }
+
+        $hautcadre = getDolGlobalInt('MAIN_PDF_USE_ISO_LOCATION') ? 38 : 40;
+        $widthrecbox = getDolGlobalInt('MAIN_PDF_USE_ISO_LOCATION') ? 92 : 82;
+
+        // Show sender frame
+        if (!getDolGlobalString('MAIN_PDF_NO_SENDER_FRAME')) {
+            $pdf->SetTextColor(0, 0, 0);
+            $pdf->SetFont('', '', $default_font_size - 2);
+            $pdf->SetXY($posx_sender, $posy_address - 5);
+            $pdf->MultiCell($widthrecbox, 5, $outputlangs->transnoentities("BillFrom"), 0, $ltrdirection);
+            $pdf->SetXY($posx_sender, $posy_address);
+            $pdf->SetFillColor(230, 230, 230);
+            $pdf->RoundedRect($posx_sender, $posy_address, $widthrecbox, $hautcadre, $this->corner_radius, '1234', 'F');
+            $pdf->SetTextColor(0, 0, 60);
+        }
+
+        // Show sender name
+        $current_y_sender = $posy_address +3;
+        if (!getDolGlobalString('MAIN_PDF_NO_SENDER_NAME')) {
+            $pdf->SetXY($posx_sender + 2, $current_y_sender);
+            $pdf->SetFont('', 'B', $default_font_size);
+            $pdf->MultiCell($widthrecbox - 2, 4, $outputlangs->convToOutputCharset($this->emetteur->name), 0, $ltrdirection);
+            $current_y_sender = $pdf->getY();
+        }
+
+        // Show sender information
+        $pdf->SetXY($posx_sender + 2, $current_y_sender);
+        $pdf->SetFont('', '', $default_font_size - 1);
+        $pdf->MultiCell($widthrecbox - 2, 4, $carac_emetteur, 0, $ltrdirection);
+
+
+        // If CUSTOMER contact defined, we use it (for expedition, this might be SHIPPING contact from order)
+        $usecontact = false;
+        $contact_to_use = null; // Initialize
+        if (isset($object->origin_object) && is_object($object->origin_object)) {
+            $arrayidcontact_shipping = $object->origin_object->getIdContact('external', 'SHIPPING');
+            if (count($arrayidcontact_shipping) > 0) {
+                $usecontact = true;
+                // $object->fetch_contact might not be the right method here if contact is on origin_object
+                // We need to fetch the contact object and store it
+                $contact_temp = new Contact($this->db);
+                $contact_temp->fetch($arrayidcontact_shipping[0]);
+                $contact_to_use = $contact_temp;
+            }
+        }
+        // If no shipping contact, try customer contact from order
+        if (!$usecontact && isset($object->origin_object) && is_object($object->origin_object)) {
+            $arrayidcontact_customer = $object->origin_object->getIdContact('external', 'CUSTOMER');
+             if (count($arrayidcontact_customer) > 0) {
+                $usecontact = true;
+                $contact_temp = new Contact($this->db);
+                $contact_temp->fetch($arrayidcontact_customer[0]);
+                $contact_to_use = $contact_temp;
+            }
+        }
+
+
+        // Recipient name
+        $thirdparty_recipient = $object->thirdparty; // Default to expedition's thirdparty
+        if ($usecontact && isset($contact_to_use->socid) && $contact_to_use->socid > 0 && $contact_to_use->socid != $object->thirdparty->id && getDolGlobalInt('MAIN_USE_COMPANY_NAME_OF_CONTACT')) {
+            $soc_temp = new Societe($this->db);
+            $soc_temp->fetch($contact_to_use->socid);
+            $thirdparty_recipient = $soc_temp; // Use contact's company if different and configured
+        }
+
+
+        if (is_object($thirdparty_recipient)) {
+            $carac_client_name = pdfBuildThirdpartyName($thirdparty_recipient, $outputlangs);
+        } else {
+            $carac_client_name = pdfBuildThirdpartyName($object->thirdparty, $outputlangs); // Fallback
+        }
+
+
+        $mode = 'target';
+        $carac_client = pdf_build_address($outputlangs, $this->emetteur, $object->thirdparty,
+                                         ($usecontact && $contact_to_use ? $contact_to_use : null),
+                                         ($usecontact ? 1 : 0), $mode, $object);
+
+        // Show recipient
+        $widthrecbox_recipient = getDolGlobalInt('MAIN_PDF_USE_ISO_LOCATION') ? 92 : 100;
+        if ($this->page_largeur < 210) {
+            $widthrecbox_recipient = 84; // To work with US executive format
+        }
+        $posy_recipient = $address_start_y;
+        $posx_recipient = $this->page_largeur - $this->marge_droite - $widthrecbox_recipient;
+        if (getDolGlobalInt('MAIN_INVERT_SENDER_RECIPIENT')) {
+            $posx_recipient = $this->marge_gauche;
+        }
+
+        // Store Y position for the top of the recipient frame
+        $recipient_frame_y_start = $posy_recipient;
+
+        // Print "BillTo" (or "ShipTo" for expedition) title (above the frame)
+        if (!getDolGlobalString('MAIN_PDF_NO_RECIPENT_FRAME')) {
+            $pdf->SetTextColor(0, 0, 0);
+            $pdf->SetFont('', '', $default_font_size - 2);
+            $pdf->SetXY($posx_recipient + 2, $recipient_frame_y_start - 5);
+            // $pdf->MultiCell($widthrecbox_recipient, 5, $outputlangs->transnoentities("BillTo"), 0, $ltrdirection);
+            $pdf->MultiCell($widthrecbox_recipient, 5, $outputlangs->transnoentities("ShipTo"), 0, $ltrdirection); // Changed to ShipTo
+        }
+
+        // Y position where actual content inside the box starts
+        $y_text_content_start_recipient = $recipient_frame_y_start + 3;
+        $pdf->SetXY($posx_recipient + 2, $y_text_content_start_recipient);
+
+        // Show recipient name
+        $pdf->SetFont('', 'B', $default_font_size);
+        $pdf->MultiCell($widthrecbox_recipient, 2, $carac_client_name, 0, $ltrdirection);
+        $current_y_tracker_recipient = $pdf->GetY();
+
+        // Show recipient information (address)
+        $pdf->SetFont('', '', $default_font_size - 1);
+        $pdf->SetXY($posx_recipient + 2, $current_y_tracker_recipient);
+        $pdf->MultiCell($widthrecbox_recipient, 4, $carac_client, 0, $ltrdirection);
+        $current_y_tracker_recipient = $pdf->GetY();
+
+        // Add Client Phone
+        if (!empty($object->thirdparty->phone)) {
+            $current_y_tracker_recipient += 1; // Add a small top margin
+            $pdf->SetFont('', '', $default_font_size - 1); // Ensure font
+            $pdf->SetXY($posx_recipient + 2, $current_y_tracker_recipient);
+            $pdf->MultiCell($widthrecbox_recipient, 4, $outputlangs->transnoentities("PhonePro").": ".$outputlangs->convToOutputCharset($object->thirdparty->phone), 0, $ltrdirection);
+            $current_y_tracker_recipient = $pdf->GetY();
+        }
+
+        // Add Client Email
+        if (!empty($object->thirdparty->email)) {
+            $current_y_tracker_recipient += 1; // Add a small top margin
+            $pdf->SetFont('', '', $default_font_size - 1); // Ensure font
+            $pdf->SetXY($posx_recipient + 2, $current_y_tracker_recipient);
+            $pdf->MultiCell($widthrecbox_recipient, 4, $outputlangs->transnoentities("Email").": ".$outputlangs->convToOutputCharset($object->thirdparty->email), 0, $ltrdirection);
+            $current_y_tracker_recipient = $pdf->GetY();
+        }
+
+        // Draw the recipient box frame using sender's box height ($hautcadre)
+        if (!getDolGlobalString('MAIN_PDF_NO_RECIPENT_FRAME')) {
+            $pdf->RoundedRect($posx_recipient, $recipient_frame_y_start, $widthrecbox_recipient, $hautcadre, $this->corner_radius, '1234', 'D');
+        }
+
+        // Update $posy to be the bottom of this recipient box for subsequent elements.
+        // This $posy was for the general layout, we should use a more specific variable if needed below,
+        // or ensure this $posy update correctly reflects the bottom of the address blocks area.
+        $posy = $recipient_frame_y_start + $hautcadre;
+
+
+        // Shipping address section for expedition is usually the main recipient.
+        // The original _pagehead for pdf_rouget handles the recipient as the shipping address.
+        // The copied logic from pdf_bon_garantie already has a recipient block.
+        // We might not need a separate shipping block here if the recipient is already the shipping destination.
+        // For now, let's assume the recipient block IS the shipping address for pdf_rouget.
+        // So, we can comment out or remove the explicit "Show shipping address" part from pdf_bon_garantie
+        // if it's redundant.
+        // For this merge, we'll keep the structure, but it might need simplification later.
+
+        $shipp_shift = 0; // Initialize shipp_shift
+
+        // The original pdf_rouget doesn't have a separate shipping address block in _pagehead,
+        // the recipient is the shipping address.
+        // The copied code from bon_garantie has a shipping block.
+        // We need to decide if we keep it or adapt.
+        // For now, let's assume the main recipient block serves as the shipping address for rouget.
+        // If a distinct shipping address is needed for rouget from another source, this would need more specific logic.
+        // The $object->getIdContact('external', 'SHIPPING') in bon_garantie might be relevant if $object here
+        // also has a similar contact fetching mechanism.
+        // Given $object is an Expedition, $object->thirdparty is the recipient.
+        // $object->origin_object would be the order, which might have a specific shipping contact.
+
+        // Let's use the shipping address logic from bon_garantie but adapt it for Expedition context.
+        // The primary recipient of an expedition IS the shipping address.
+        // So the "Recipient" frame above already serves this purpose.
+        // We can remove the secondary shipping address block or make it conditional
+        // if an expedition can have yet another shipping address different from its main thirdparty.
+        // For simplicity, we'll assume the "Recipient" box is the "ShipTo" box.
+        // The code above already uses $outputlangs->transnoentities("ShipTo") for the recipient box title.
+
+    }
+
+    $pdf->SetTextColor(0, 0, 0);
+
+    $pagehead = array('top_shift' => $top_shift, 'shipp_shift' => $shipp_shift);
+
+    return $pagehead;
+}
 
 	// phpcs:disable PEAR.NamingConventions.ValidFunctionName.PublicUnderscore
 	/**
@@ -1176,9 +1455,96 @@ class pdf_rouget extends ModelePdfExpedition
 	 *  @param	int			$hidefreetext		1=Hide free text
 	 *  @return	int								Return height of bottom margin including footer text
 	 */
-	protected function _pagefoot(&$pdf, $object, $outputlangs, $hidefreetext = 0)
-	{
-		$showdetails = getDolGlobalInt('MAIN_GENERATE_DOCUMENTS_SHOW_FOOT_DETAILS', 0);
-		return pdf_pagefoot($pdf, $outputlangs, 'SHIPPING_FREE_TEXT', $this->emetteur, $this->marge_basse, $this->marge_gauche, $this->page_hauteur, $object, $showdetails, $hidefreetext, $this->page_largeur, $this->watermark);
-	}
+/**
+ * Show footer of page. Need this->emetteur object
+ *
+ * @param TCPDF       $pdf            PDF
+ * @param Commande    $object         Object to show
+ * @param Translate   $outputlangs    Object lang for output
+ * @param int         $hidefreetext   1=Hide free text
+ * @return int                        Return height of bottom margin including footer text
+ */
+protected function _pagefoot(&$pdf, $object, $outputlangs, $hidefreetext = 0)
+{
+    global $conf;
+
+    $showdetails = getDolGlobalInt('MAIN_GENERATE_DOCUMENTS_SHOW_FOOT_DETAILS', 0);
+    $default_font_size = pdf_getPDFFontSize($outputlangs);
+    $width = $this->page_largeur - $this->marge_gauche - $this->marge_droite;
+
+    // Standard footer content
+    // Note: The free text key for expedition is 'SHIPPING_FREE_TEXT'
+    $height = pdf_pagefoot($pdf, $outputlangs, 'SHIPPING_FREE_TEXT', $this->emetteur, $this->marge_basse, $this->marge_gauche, $this->page_hauteur, $object, $showdetails, $hidefreetext, $this->page_largeur, $this->watermark);
+
+    // Add warranty conditions only on the last page
+// In _pagefoot method, replace the warranty conditions block
+if ($pdf->getPage() == $pdf->getNumPages()) {
+    $posy = $this->page_hauteur - $this->marge_basse - 40; // Reserve space for warranty conditions
+    // Adjust Y position if standard footer already took some space.
+    // $height from pdf_pagefoot is the height of the standard footer.
+    // We need to place warranty conditions above this, or integrate carefully.
+    // For now, let's assume $this->marge_basse is the primary bottom margin, and warranty text goes above it.
+    // If $height (from pdf_pagefoot) is significant, this $posy might overlap.
+    // A safer $posy might be $this->page_hauteur - $this->marge_basse - $height_of_warranty_text - $height_of_standard_footer_text
+    // Let's try to position it fixed from bottom, ensuring it doesn't overlap with pdf_pagefoot content.
+    // The pdf_pagefoot function draws from $this->page_hauteur - $this->marge_basse upwards.
+    // So, we need to draw warranty text at $this->page_hauteur - $this->marge_basse - $height_of_warranty_text (e.g. 40)
+    // and then ensure pdf_pagefoot's content is drawn above that or this fixed block is considered by pdf_pagefoot.
+
+    // Recalculate posy to be above the standard footer elements drawn by pdf_pagefoot
+    // $height already includes some margin from bottom.
+    // Let's position the warranty text block starting from a calculated Y
+    // that is above where pdf_pagefoot would draw its own text.
+    // pdf_pagefoot uses $this->page_hauteur - $this->marge_basse as its effective bottom line.
+    // The warranty text needs to be above this.
+    $warranty_block_height = 40; // Estimated height for warranty text
+    $posy = $this->page_hauteur - $this->marge_basse - $warranty_block_height;
+    if ($showdetails) { // If company details are shown by pdf_pagefoot, they take ~6mm
+        $posy -= 6;
+    }
+    if (!$hidefreetext && !empty($conf->global->SHIPPING_FREE_TEXT)) { // If free text is shown
+        // Estimate height of free text. This is tricky.
+        // Let's assume a fixed reduction for now if free text exists.
+        // A more robust way would be to measure freetext height.
+        $posy -= (getDolGlobalInt('MAIN_PDF_FREETEXT_HEIGHT', 5) > 0 ? getDolGlobalInt('MAIN_PDF_FREETEXT_HEIGHT', 5) + 2 : 0);
+    }
+
+
+    $warranty_conditions = "شروط الضمان:\n";
+    $warranty_conditions .= "1- تضمن الشركة للزبون العتاد المباع، ضد كل عيوب التصنيع والعمالة ضمن المدة المحددة ابتداء من تاريخ الشراء.\n";
+    $warranty_conditions .= "2- نظام التشغيل والبرامج + نضائد الكمبيوتر المحمول ولوحات المفاتيح وكذا مقود اللعب، الفارة، مكبرات الصوت الفلاشديسك والمستهلكات مضمونة فقط عند أول تشغيل.\n";
+    $warranty_conditions .= "5- تثبيت البرمجيات غير مضمون.\n";
+    $warranty_conditions .= "7- لا تضمن الشركة أن هذا العتاد سيشتغل بصفة غير منقطعة أو دون خطأ في هذا العتاد.\n";
+    $warranty_conditions .= "8- الضمان لا يشمل إرجاع المنتوج أو استبداله، تمنح الشركة مدة 3 أيام من تاريخ استلام المنتوج كأقصى حد لإرجاعه يتم فيها مراجعة المنتوج وتطبيق مستحقات قدرها 5% من سعر المنتوج -(لا تشمل مستحقات التوصيل)-.\n";
+    $warranty_conditions .= "9- على الزبون الحفاظ على التغليف خلال مدة ضمان.\n";
+    $warranty_conditions .= "10- الضمان لا يشمل: القيام بكسر السرعة OVER CLOCK / الصيانة سيئة / تغيير أو استعمال غير مرخصين / استعمال بطاقة امتداد غير معتمدة / حالات نقل سيئة. وفي حالة خلل في الجهاز يجب على الزبون إرجاعه للشركة خلال فترة الضمان في تغليفه الأصلي.\n";
+    $warranty_conditions .= "11- الضمان على الطابعة يشمل إشتغالها فقط، ولا يشمل أخطاء الطباعة أو سوء ملء الخزان الخاص بها.";
+  
+    $pdf->SetFont('aealarabiya', '', $default_font_size - 1);
+    $pdf->SetTextColor(0, 0, 0);
+    // $pdf->SetXY($this->marge_gauche, $posy); // SetXY might be problematic if MultiCell pushes Y too far
+    $pdf->SetFillColor(255, 255, 255); // Changed to white
+
+    // Draw the rounded rectangle first
+    $pdf->RoundedRect($this->marge_gauche, $posy, $width, $warranty_block_height, $this->corner_radius, '1234', 'F');
+    
+    // Set position for MultiCell carefully within the rectangle
+    $pdf->SetXY($this->marge_gauche + 2, $posy + 2);
+    $pdf->MultiCell($width - 4, 4, $outputlangs->convToOutputCharset($warranty_conditions), 0, 'R', true, 1, '', '', true, 0, false, true, $warranty_block_height - 4, 'T');
+
+    // $height from pdf_pagefoot is the height of the standard footer.
+    // We are adding warranty conditions, so the total footer area might increase.
+    // However, pdf_pagefoot returns the height it consumed.
+    // The question is whether this custom block should be part of that height or extend it.
+    // If we want the page numbering (part of pdf_pagefoot) to be at the very bottom,
+    // this warranty text must be placed above where pdf_pagefoot starts its drawing.
+    // The current $height is what pdf_pagefoot calculated. We're adding text above it.
+    // The effective total footer height used would be $warranty_block_height + $height_of_standard_text_below_warranty.
+    // For now, let's return the original $height from pdf_pagefoot, as that function handles page numbering at the absolute bottom.
+    // This assumes the warranty text fits nicely above the standard footer text.
 }
+
+    return $height; // Return the height calculated by the standard pdf_pagefoot
+}
+}
+

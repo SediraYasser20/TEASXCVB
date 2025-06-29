@@ -85,18 +85,29 @@ class FormMargin
 		);
 
 		foreach ($object->lines as $line) {
-			if (empty($line->pa_ht) && isset($line->fk_fournprice) && !$force_price) {
-				require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.product.class.php';
-				$product = new ProductFournisseur($this->db);
-				if ($product->fetch_product_fournisseur_price($line->fk_fournprice)) {
-					$line->pa_ht = $product->fourn_unitprice * (1 - $product->fourn_remise_percent / 100);
+			// For product 483 (Costum-PC), we trust the pa_ht set by the trigger and loaded by OrderLine::fetch().
+			// We must prevent the fallback logic below from overriding it if pa_ht is 0.00 (which makes empty() true).
+			$is_product_483_with_pa_ht_set = ($line->fk_product == 483 && isset($line->pa_ht));
+
+			if (!$is_product_483_with_pa_ht_set) {
+				// Original fallback logic for non-product 483 lines, or if pa_ht was not set for product 483 by trigger
+				if (empty($line->pa_ht) && isset($line->fk_fournprice) && !$force_price) {
+					require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.product.class.php';
+					$product = new ProductFournisseur($this->db);
+					if ($product->fetch_product_fournisseur_price($line->fk_fournprice)) {
+						$line->pa_ht = $product->fourn_unitprice * (1 - $product->fourn_remise_percent / 100);
+					}
+				}
+
+				// If buy price is not defined (null), we will use the sell price.
+				if ((!isset($line->pa_ht)) && $line->subprice > 0 && (isset($conf->global->ForceBuyingPriceIfNull) && getDolGlobalInt('ForceBuyingPriceIfNull') > 0)) {
+					$line->pa_ht = $line->subprice * (1 - ($line->remise_percent / 100));
 				}
 			}
 
-			// If buy price is not defined (null), we will use the sell price. If defined to 0 (it means it was forced to 0 during insert, for example for a free to get product), we must still use 0.
-			//if ((!isset($line->pa_ht) || $line->pa_ht == 0) && $line->subprice > 0 && (isset($conf->global->ForceBuyingPriceIfNull) && $conf->global->ForceBuyingPriceIfNull > 0)) {
-			if ((!isset($line->pa_ht)) && $line->subprice > 0 && (isset($conf->global->ForceBuyingPriceIfNull) && getDolGlobalInt('ForceBuyingPriceIfNull') > 0)) {
-				$line->pa_ht = $line->subprice * (1 - ($line->remise_percent / 100));
+			// Ensure pa_ht is at least 0 if it's still not set (e.g. for product 483 if trigger set NULL, or other new lines)
+			if (!isset($line->pa_ht)) {
+				$line->pa_ht = 0.00;
 			}
 
 			$pv = $line->total_ht;
@@ -151,7 +162,7 @@ class FormMargin
 				}
 			} else {
 				$type = $line->product_type ? $line->product_type : $line->fk_product_type;
-				if ($type == 0) {  // product
+if ($type == 0 || $type === 'mo') {  // product or MO
 					$marginInfos['pa_products'] += $pa;
 					$marginInfos['pv_products'] += $pv;
 					$marginInfos['pa_total'] += $pa;
@@ -326,3 +337,4 @@ class FormMargin
 		}
 	}
 }
+

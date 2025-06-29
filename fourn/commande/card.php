@@ -2616,27 +2616,27 @@ if ($action == 'create') {
 				}
 
 				// Reopen
-				if (in_array($object->statut, array(CommandeFournisseur::STATUS_ACCEPTED))) {
-					$buttonshown = 0;
-					if (!$buttonshown && $usercanapprove) {
-						if (!getDolGlobalString('SUPPLIER_ORDER_REOPEN_BY_APPROVER_ONLY')
-							|| (getDolGlobalString('SUPPLIER_ORDER_REOPEN_BY_APPROVER_ONLY') && $user->id == $object->user_approve_id)) {
-							print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("Disapprove").'</a>';
-							$buttonshown++;
-						}
-					}
-					if (!$buttonshown && $usercanapprovesecond && getDolGlobalString('SUPPLIER_ORDER_3_STEPS_TO_BE_APPROVED')) {
-						if (!getDolGlobalString('SUPPLIER_ORDER_REOPEN_BY_APPROVER2_ONLY')
-							|| (getDolGlobalString('SUPPLIER_ORDER_REOPEN_BY_APPROVER2_ONLY') && $user->id == $object->user_approve_id2)) {
-							print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("Disapprove").'</a>';
-						}
-					}
-				}
-				if (in_array($object->statut, array(3, 4, 5, 6, 7, 9))) {
-					if ($usercanorder) {
-						print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("ReOpen").'</a>';
-					}
-				}
+			if (in_array($object->statut, array(CommandeFournisseur::STATUS_ACCEPTED))) {
+    $buttonshown = 0;
+    if (!$buttonshown && $usercanapprove) {
+        if (!getDolGlobalString('SUPPLIER_ORDER_REOPEN_BY_APPROVER_ONLY')
+            || (getDolGlobalString('SUPPLIER_ORDER_REOPEN_BY_APPROVER_ONLY') && $user->id == $object->user_approve_id)) {
+            print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("Disapprove").'</a>';
+            $buttonshown++;
+        }
+    }
+    if (!$buttonshown && $usercanapprovesecond && getDolGlobalString('SUPPLIER_ORDER_3_STEPS_TO_BE_APPROVED')) {
+        if (!getDolGlobalString('SUPPLIER_ORDER_REOPEN_BY_APPROVER2_ONLY')
+            || (getDolGlobalString('SUPPLIER_ORDER_REOPEN_BY_APPROVER2_ONLY') && $user->id == $object->user_approve_id2)) {
+            print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("Disapprove").'</a>';
+        }
+    }
+}
+if (in_array($object->statut, array(3, 4, 5, 6, 7, 9))) {
+    if ($user->admin) { // Restrict to admin only
+        print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("ReOpen").'</a>';
+    }
+}
 
 				// Ship
 				$hasreception = 0;

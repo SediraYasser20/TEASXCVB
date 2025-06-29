@@ -287,66 +287,58 @@ if ($reshook < 0) setEventMessages($hookmanager->error, $hookmanager->errors, 'e
 
 
 if (empty($reshook)) {
-
     if ($action == 'update_sav' && !$cancel) {
-
         if ($permissiontoadd) {
-
             $error = 0;
 
-            
+            // 1) Update SAV order flag from checkbox
+            $object->array_options['options_savorders_sav'] = GETPOST('savorders_sav','int') ? 1 : 0;
 
-            // Update SAV order flag from checkbox
-
-            $object->array_options['options_savorders_sav'] = GETPOST('savorders_sav', 'int') ? 1 : 0;
-
-            
-
-            // Update facture_sav from dropdown
-
-            $facture_sav_value = GETPOST('facture_sav', 'int');
-
+            // 2) Update facture_sav from dropdown
+            $facture_sav_value = GETPOST('facture_sav','int');
             $object->array_options['options_facture_sav'] = $facture_sav_value > 0 ? $facture_sav_value : 0;
 
-            
+            // ← INSERT THIS ENTIRE SNIPPET RIGHT HERE ↓
+            if ($facture_sav_value > 0) {
+                // a) Force status = REIMBURSED (3)
+                $object->array_options['options_savorders_status'] = savorders::REIMBURSED;
+
+                // b) Load invoice reference
+                $sql   = "SELECT ref FROM ".MAIN_DB_PREFIX."facture WHERE rowid=".(int)$facture_sav_value;
+                $resql = $db->query($sql);
+                $invRef = $resql ? $db->fetch_object($resql)->ref : $facture_sav_value;
+
+                // c) Append history line with invoice ref
+                $today = dol_print_date(dol_now(), 'day');
+                $hist  = $object->array_options['options_savorders_history'];
+                $hist .= '<div class="savorders_history_txt">'
+                       . '- '.$today.': '.$langs->trans('ClientReimbursedInvoice', $invRef)
+                       . '</div>';
+
+                $object->array_options['options_savorders_history'] = $hist;
+            }
+            // ↑ END INSERT
 
             if (!$error) {
-
-                // When only extrafields are modified, insertExtraFields() is sufficient.
-
+                // Persist all extrafields in one go
                 $result = $object->insertExtraFields();
-
                 if ($result < 0) {
-
                     setEventMessages($object->error, $object->errors, 'errors');
-
                     $error++;
-
                 }
-
             }
-
-            
 
             if (!$error) {
-
                 setEventMessages($langs->trans("RecordSaved"), null, 'mesgs');
-
                 header('Location: '.$_SERVER["PHP_SELF"].'?id='.$object->id);
-
                 exit;
-
             }
-
         } else {
-
             setEventMessages($langs->trans("NotEnoughPermissions"), null, 'errors');
-
         }
-
     }
-
 }
+
 
 
 
@@ -644,15 +636,39 @@ if ($id > 0 || !empty($ref)) {
 
     $sav_status = isset($object->array_options['options_savorders_status']) ? $object->array_options['options_savorders_status'] : '';
 
-    if (empty($sav_status)) {
-
-        print '<span class="opacitymedium">'.$langs->trans("NotGenerated").'</span>';
-
+ // SAV Status (Read‑only)
+if ($sav_status == savorders::REIMBURSED) {
+    $fact_id = $object->array_options['options_facture_sav'] ?? 0;
+    if ($fact_id) {
+        $fac = new Facture($db);
+        if ($fac->fetch($fact_id) > 0) {
+            // Show reimbursed amount with currency
+            $amount = price($fac->total_ttc).' '.$langs->trans("Currency".$conf->currency);
+            print '<span class="badge badge-status4">'
+                . $langs->trans("ClientReimbursedAmount", $amount)
+                . '</span>';
+        } else {
+            print '<span class="badge badge-status4">'.$langs->trans("Reimbursed").'</span>';
+        }
     } else {
-
-        print '<span class="badge badge-status4">'.dol_escape_htmltag($sav_status).'</span>';
-
+        print '<span class="badge badge-status4">'.$langs->trans("Reimbursed").'</span>';
     }
+}
+elseif (empty($sav_status)) {
+    print '<span class="opacitymedium">'.$langs->trans("NotGenerated").'</span>';
+}
+else {
+    // your existing Received/Delivered labels
+    $map = [
+        savorders::RECIEVED_CUSTOMER  => $langs->trans('ProductReceivedFromCustomer'),
+        savorders::DELIVERED_CUSTOMER => $langs->trans('ProductDeliveredToCustomer'),
+        savorders::DELIVERED_SUPPLIER => $langs->trans('ProductDeliveredToSupplier'),
+        savorders::RECEIVED_SUPPLIER  => $langs->trans('ProductReceivedFromSupplier'),
+    ];
+    $label = $map[$sav_status] ?? $sav_status;
+    print '<span class="badge badge-status4">'.dol_escape_htmltag($label).'</span>';
+}
+
 
     print '</td>';
 

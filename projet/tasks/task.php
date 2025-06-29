@@ -100,69 +100,56 @@ restrictedArea($user, 'projet', $object->fk_project, 'projet&project');
 $error = 0;
 
 if ($action == 'update' && !GETPOST("cancel") && $user->hasRight('projet', 'creer')) {
-    if (empty($taskref)) {
-        $error++;
-        setEventMessages($langs->trans("ErrorFieldRequired", $langs->transnoentities("Ref")), null, 'errors');
-    }
-    if (!GETPOST("label")) {
-        $error++;
-        setEventMessages($langs->trans("ErrorFieldRequired", $langs->transnoentities("Label")), null, 'errors');
-    }
-    if (!$error) {
-        $object->oldcopy = clone $object;
+	if (empty($taskref)) {
+		$error++;
+		setEventMessages($langs->trans("ErrorFieldRequired", $langs->transnoentities("Ref")), null, 'errors');
+	}
+	if (!GETPOST("label")) {
+		$error++;
+		setEventMessages($langs->trans("ErrorFieldRequired", $langs->transnoentities("Label")), null, 'errors');
+	}
+	if (!$error) {
+		$object->oldcopy = clone $object;
 
-        $tmparray = explode('_', GETPOST('task_parent'));
-        $task_parent = $tmparray[1];
-        if (empty($task_parent)) {
-            $task_parent = 0; // If task_parent is ''
-        }
+		$tmparray = explode('_', GETPOST('task_parent'));
+		$task_parent = $tmparray[1];
+		if (empty($task_parent)) {
+			$task_parent = 0; // If task_parent is ''
+		}
 
-        // Only update fields if they are not already set
-        if (empty($object->ref)) {
-            $object->ref = $taskref ? $taskref : GETPOST("ref", 'alpha', 2);
-        }
-        if (empty($object->label)) {
-            $object->label = GETPOST("label", "alphanohtml");
-        }
-        if (empty($object->fk_task_parent)) {
-            $object->fk_task_parent = $task_parent;
-        }
-        if (empty($object->date_start)) {
-            $object->date_start = dol_mktime(GETPOSTINT('date_starthour'), GETPOSTINT('date_startmin'), 0, GETPOSTINT('date_startmonth'), GETPOSTINT('date_startday'), GETPOSTINT('date_startyear'));
-        }
-        if (empty($object->date_end)) {
-            $object->date_end = dol_mktime(GETPOSTINT('date_endhour'), GETPOSTINT('date_endmin'), 0, GETPOSTINT('date_endmonth'), GETPOSTINT('date_endday'), GETPOSTINT('date_endyear'));
-        }
+		$object->ref = $taskref ? $taskref : GETPOST("ref", 'alpha', 2);
+		$object->label = GETPOST("label", "alphanohtml");
+		if (!getDolGlobalString('FCKEDITOR_ENABLE_SOCIETE')) {
+			$object->description = GETPOST('description', "alphanohtml");
+		} else {
+			$object->description = GETPOST('description', "restricthtml");
+		}
+		$object->fk_task_parent = $task_parent;
+		$object->planned_workload = $planned_workload;
+		$object->date_start = dol_mktime(GETPOSTINT('date_starthour'), GETPOSTINT('date_startmin'), 0, GETPOSTINT('date_startmonth'), GETPOSTINT('date_startday'), GETPOSTINT('date_startyear'));
+		$object->date_end = dol_mktime(GETPOSTINT('date_endhour'), GETPOSTINT('date_endmin'), 0, GETPOSTINT('date_endmonth'), GETPOSTINT('date_endday'), GETPOSTINT('date_endyear'));
+		$object->progress = price2num(GETPOST('progress', 'alphanohtml'));
+		$object->budget_amount = GETPOSTFLOAT('budget_amount');
+		$object->billable = (GETPOST('billable', 'aZ') == 'yes' ? 1 : 0);
 
-        // Fields that can always be updated
-        if (!getDolGlobalString('FCKEDITOR_ENABLE_SOCIETE')) {
-            $object->description = GETPOST('description', "alphanohtml");
-        } else {
-            $object->description = GETPOST('description', "restricthtml");
-        }
-        $object->planned_workload = $planned_workload;
-        $object->progress = price2num(GETPOST('progress', 'alphanohtml'));
-        $object->budget_amount = GETPOSTFLOAT('budget_amount');
-        $object->billable = (GETPOST('billable', 'aZ') == 'yes' ? 1 : 0);
+		// Fill array 'array_options' with data from add form
+		$ret = $extrafields->setOptionalsFromPost(null, $object, '@GETPOSTISSET');
+		if ($ret < 0) {
+			$error++;
+		}
 
-        // Fill array 'array_options' with data from add form
-        $ret = $extrafields->setOptionalsFromPost(null, $object, '@GETPOSTISSET');
-        if ($ret < 0) {
-            $error++;
-        }
-
-        if (!$error) {
-            $result = $object->update($user);
-            if ($result < 0) {
-                setEventMessages($object->error, $object->errors, 'errors');
-                $action = 'edit';
-            }
-        } else {
-            $action = 'edit';
-        }
-    } else {
-        $action = 'edit';
-    }
+		if (!$error) {
+			$result = $object->update($user);
+			if ($result < 0) {
+				setEventMessages($object->error, $object->errors, 'errors');
+				$action = 'edit';
+			}
+		} else {
+			$action = 'edit';
+		}
+	} else {
+		$action = 'edit';
+	}
 }
 
 if ($action == 'confirm_merge' && $confirm == 'yes' && $user->hasRight('projet', 'creer')) {
@@ -481,137 +468,106 @@ if ($id > 0 || !empty($ref)) {
 
 	$head = task_prepare_head($object);
 
+	if ($action == 'edit' && $user->hasRight('projet', 'creer')) {
+		print '<form method="POST" action="'.$_SERVER["PHP_SELF"].'">';
+		print '<input type="hidden" name="token" value="'.newToken().'">';
+		print '<input type="hidden" name="action" value="update">';
+		print '<input type="hidden" name="withproject" value="'.$withproject.'">';
+		print '<input type="hidden" name="id" value="'.$object->id.'">';
 
-if ($action == 'edit' && $user->hasRight('projet', 'creer')) {
-    print '<form method="POST" action="'.$_SERVER["PHP_SELF"].'">';
-    print '<input type="hidden" name="token" value="'.newToken().'">';
-    print '<input type="hidden" name="action" value="update">';
-    print '<input type="hidden" name="withproject" value="'.$withproject.'">';
-    print '<input type="hidden" name="id" value="'.$object->id.'">';
+		print dol_get_fiche_head($head, 'task_task', $langs->trans("Task"), 0, 'projecttask', 0, '', '');
 
-    print dol_get_fiche_head($head, 'task_task', $langs->trans("Task"), 0, 'projecttask', 0, '', '');
+		print '<table class="border centpercent">';
 
-    print '<table class="border centpercent">';
+		// Ref
+		print '<tr><td class="titlefield fieldrequired">'.$langs->trans("Ref").'</td>';
+		print '<td><input class="minwidth100" name="taskref" value="'.$object->ref.'"></td></tr>';
 
-    // Ref
-    print '<tr><td class="titlefield fieldrequired">'.$langs->trans("Ref").'</td>';
-    if (!empty($object->ref)) {
-        print '<td>'.dol_escape_htmltag($object->ref).'<input type="hidden" name="taskref" value="'.dol_escape_htmltag($object->ref).'"></td>';
-    } else {
-        print '<td><input class="minwidth100" name="taskref" value="'.dol_escape_htmltag($object->ref).'"></td>';
-    }
-    print '</tr>';
+		// Label
+		print '<tr><td class="fieldrequired">'.$langs->trans("Label").'</td>';
+		print '<td><input class="minwidth500" name="label" value="'.$object->label.'"></td></tr>';
 
-    // Label
-    print '<tr><td class="fieldrequired">'.$langs->trans("Label").'</td>';
-    if (!empty($object->label)) {
-        print '<td>'.dol_escape_htmltag($object->label).'<input type="hidden" name="label" value="'.dol_escape_htmltag($object->label).'"></td>';
-    } else {
-        print '<td><input class="minwidth500" name="label" value="'.dol_escape_htmltag($object->label).'"></td>';
-    }
-    print '</tr>';
+		// Project
+		if (empty($withproject)) {
+			print '<tr><td>'.$langs->trans("Project").'</td><td>';
+			print $projectstatic->getNomUrl(1);
+			print '</td></tr>';
 
-    // Project
-    if (empty($withproject)) {
-        print '<tr><td>'.$langs->trans("Project").'</td><td>';
-        print $projectstatic->getNomUrl(1);
-        print '</td></tr>';
+			// Third party
+			print '<td>'.$langs->trans("ThirdParty").'</td><td>';
+			if ($projectstatic->thirdparty->id) {
+				print $projectstatic->thirdparty->getNomUrl(1);
+			} else {
+				print '&nbsp;';
+			}
+			print '</td></tr>';
+		}
 
-        // Third party
-        print '<tr><td>'.$langs->trans("ThirdParty").'</td><td>';
-        if ($projectstatic->thirdparty->id) {
-            print $projectstatic->thirdparty->getNomUrl(1);
-        } else {
-            print ' ';
-        }
-        print '</td></tr>';
-    }
+		// Task parent
+		print '<tr><td>'.$langs->trans("ChildOfProjectTask").'</td><td>';
+		print img_picto('', 'projecttask');
+		$formother->selectProjectTasks($object->fk_task_parent, $projectstatic->id, 'task_parent', ($user->admin ? 0 : 1), 0, 0, 0, $object->id, '', 'minwidth100 widthcentpercentminusxx maxwidth500');
+		print '</td></tr>';
 
-    // Task parent
-    print '<tr><td>'.$langs->trans("ChildOfProjectTask").'</td><td>';
-    print img_picto('', 'projecttask');
-    if ($object->fk_task_parent > 0) {
-        $tasktmp = new Task($db);
-        $tasktmp->fetch($object->fk_task_parent);
-        print $tasktmp->getNomUrl(1).'<input type="hidden" name="task_parent" value="task_'.$object->fk_task_parent.'">';
-    } else {
-        $formother->selectProjectTasks($object->fk_task_parent, $projectstatic->id, 'task_parent', ($user->admin ? 0 : 1), 0, 0, 0, $object->id, '', 'minwidth100 widthcentpercentminusxx maxwidth500');
-    }
-    print '</td></tr>';
+		// Date start
+		print '<tr><td>'.$langs->trans("DateStart").'</td><td>';
+		print $form->selectDate($object->date_start, 'date_start', 1, 1, 0, '', 1, 0);
+		print '</td></tr>';
 
-    // Date start
-    print '<tr><td>'.$langs->trans("DateStart").'</td><td>';
-    if ($object->date_start) {
-        print dol_print_date($object->date_start, 'dayhour').'<input type="hidden" name="date_startday" value="'.dol_print_date($object->date_start, '%d').'">';
-        print '<input type="hidden" name="date_startmonth" value="'.dol_print_date($object->date_start, '%m').'">';
-        print '<input type="hidden" name="date_startyear" value="'.dol_print_date($object->date_start, '%Y').'">';
-        print '<input type="hidden" name="date_starthour" value="'.dol_print_date($object->date_start, '%H').'">';
-        print '<input type="hidden" name="date_startmin" value="'.dol_print_date($object->date_start, '%M').'">';
-    } else {
-        print $form->selectDate($object->date_start, 'date_start', 1, 1, 0, '', 1, 0);
-    }
-    print '</td></tr>';
+		// Date end
+		print '<tr><td>'.$langs->trans("Deadline").'</td><td>';
+		print $form->selectDate($object->date_end ? $object->date_end : -1, 'date_end', 1, 1, 0, '', 1, 0);
+		print '</td></tr>';
 
-    // Date end
-    print '<tr><td>'.$langs->trans("Deadline").'</td><td>';
-    if ($object->date_end) {
-        print dol_print_date($object->date_end, 'dayhour').'<input type="hidden" name="date_endday" value="'.dol_print_date($object->date_end, '%d').'">';
-        print '<input type="hidden" name="date_endmonth" value="'.dol_print_date($object->date_end, '%m').'">';
-        print '<input type="hidden" name="date_endyear" value="'.dol_print_date($object->date_end, '%Y').'">';
-        print '<input type="hidden" name="date_endhour" value="'.dol_print_date($object->date_end, '%H').'">';
-        print '<input type="hidden" name="date_endmin" value="'.dol_print_date($object->date_end, '%M').'">';
-    } else {
-        print $form->selectDate($object->date_end ? $object->date_end : -1, 'date_end', 1, 1, 0, '', 1, 0);
-    }
-    print '</td></tr>';
+		// Planned workload
+		print '<tr><td>'.$langs->trans("PlannedWorkload").'</td><td>';
+		print $form->select_duration('planned_workload', $object->planned_workload, 0, 'text');
+		print '</td></tr>';
 
-    // Planned workload
-    print '<tr><td>'.$langs->trans("PlannedWorkload").'</td><td>';
-    print $form->select_duration('planned_workload', $object->planned_workload, 0, 'text');
-    print '</td></tr>';
+		// Progress declared
+		print '<tr><td>'.$langs->trans("ProgressDeclared").'</td><td>';
+		print $formother->select_percent($object->progress, 'progress', 0, 5, 0, 100, 1);
+		print '</td></tr>';
 
-    // Progress declared
-    print '<tr><td>'.$langs->trans("ProgressDeclared").'</td><td>';
-    print $formother->select_percent($object->progress, 'progress', 0, 5, 0, 100, 1);
-    print '</td></tr>';
+		// Billable
+		print '<tr><td>'.$langs->trans("Billable").'</td><td>';
+		print $form->selectyesno('billable', $object->billable);
+		print '</td></tr>';
 
-    // Billable
-    print '<tr><td>'.$langs->trans("Billable").'</td><td>';
-    print $form->selectyesno('billable', $object->billable);
-    print '</td></tr>';
+		// Description
 
-    // Description
-    print '<tr><td class="tdtop">'.$langs->trans("Description").'</td>';
-    print '<td>';
+		print '<tr><td class="tdtop">'.$langs->trans("Description").'</td>';
+		print '<td>';
 
-    // WYSIWYG editor
-    include_once DOL_DOCUMENT_ROOT.'/core/class/doleditor.class.php';
-    $nbrows = getDolGlobalInt('MAIN_INPUT_DESC_HEIGHT', 0);
-    $doleditor = new DolEditor('description', $object->description, '', 80, 'dolibarr_details', '', false, true, getDolGlobalInt('FCKEDITOR_ENABLE_SOCIETE'), $nbrows, '90%');
-    print $doleditor->Create();
+		// WYSIWYG editor
+		include_once DOL_DOCUMENT_ROOT.'/core/class/doleditor.class.php';
+		$nbrows = getDolGlobalInt('MAIN_INPUT_DESC_HEIGHT', 0);
+		$doleditor = new DolEditor('description', $object->description, '', 80, 'dolibarr_details', '', false, true, getDolGlobalInt('FCKEDITOR_ENABLE_SOCIETE'), $nbrows, '90%');
+		print $doleditor->Create();
 
-    print '</td></tr>';
+		print '</td></tr>';
 
-    print '<tr><td>'.$langs->trans("Budget").'</td>';
-    print '<td><input class="width75" type="text" name="budget_amount" value="'.dol_escape_htmltag(GETPOSTISSET('budget_amount') ? GETPOST('budget_amount') : price2num($object->budget_amount)).'"></td>';
-    print '</tr>';
 
-    // Other options
-    $parameters = array();
-    $reshook = $hookmanager->executeHooks('formObjectOptions', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
-    print $hookmanager->resPrint;
-    if (empty($reshook)) {
-        print $object->showOptionals($extrafields, 'edit');
-    }
+		print '<tr><td>'.$langs->trans("Budget").'</td>';
+		print '<td><input class="width75" type="text" name="budget_amount" value="'.dol_escape_htmltag(GETPOSTISSET('budget_amount') ? GETPOST('budget_amount') : price2num($object->budget_amount)).'"></td>';
+		print '</tr>';
 
-    print '</table>';
+		// Other options
+		$parameters = array();
+		$reshook = $hookmanager->executeHooks('formObjectOptions', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
+		print $hookmanager->resPrint;
+		if (empty($reshook)) {
+			print $object->showOptionals($extrafields, 'edit');
+		}
 
-    print dol_get_fiche_end();
+		print '</table>';
 
-    print $form->buttonsSaveCancel("Modify");
+		print dol_get_fiche_end();
 
-    print '</form>';
-} else {
+		print $form->buttonsSaveCancel("Modify");
+
+		print '</form>';
+	} else {
 		/*
 		 * Fiche tache en mode visu
 		 */
@@ -840,22 +796,6 @@ if ($action == 'edit' && $user->hasRight('projet', 'creer')) {
 		print '</div></div>';
 	}
 }
-print '<script type="text/javascript">
-    $(document).ready(function() {
-        var etatField = $("select[name=\'options_etat\']");
-        if (etatField.val() === "1") {
-            etatField.prop("disabled", true);
-        }
-    });
-</script>';
-print '<script type="text/javascript">
-    $(document).ready(function() {
-        var etatField = $("select[name=\'options_etat\']");
-        if (etatField.val() === "1") {
-            etatField.prop("disabled", true);
-        }
-    });
-</script>';
 
 // End of page
 llxFooter();

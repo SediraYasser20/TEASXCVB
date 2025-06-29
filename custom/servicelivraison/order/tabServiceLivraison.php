@@ -151,8 +151,8 @@ if (GETPOST('action') === 'set_service_livraison') {
             $commande->array_options['options_commentaire'] = $newCommentaire;
         }
 
-        // Destination & Kilometrage rules (preserve once set)
-        foreach (['destination', 'kilometrage'] as $field) {
+        // Destination rules (preserve once set)
+        foreach (['destination'] as $field) {
             $key = "options_$field";
             $newVal = GETPOST($key, $field === 'destination' ? 'alpha' : 'alpha');
             if (!empty($original[$key]) && $original[$key] !== $newVal && $newVal !== '') {
@@ -226,8 +226,8 @@ if ($payeeReadonly) {
 }
 print '</td></tr>';
 
-// Destination & Kilometrage
-foreach (['destination', 'kilometrage'] as $fld) {
+// Destination
+foreach (['destination'] as $fld) {
     $key = "options_$fld";
     $val = $options[$key] ?? '';
     $set = !empty($val);

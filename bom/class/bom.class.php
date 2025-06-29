@@ -299,6 +299,10 @@ class BOM extends CommonObject
 			$this->efficiency = 1;
 		}
 
+		if (isset($this->context['is_in_restricted_group']) && $this->context['is_in_restricted_group']) {
+			$this->fk_warehouse = 4;
+		}
+
 		return $this->createCommon($user, $notrigger);
 	}
 
@@ -1684,3 +1688,4 @@ class BOM extends CommonObject
 		return $return;
 	}
 }
+

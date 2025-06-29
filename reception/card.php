@@ -221,9 +221,9 @@ if (empty($reshook)) {
 	include DOL_DOCUMENT_ROOT.'/core/actions_dellink.inc.php'; // Must be 'include', not 'include_once'
 
 	// Reopen
-if ($action == 'reopen' && $permissiontoadd && $user->admin) { // Test on permissions not required here
-    $result = $object->reOpen();
-}
+	if ($action == 'reopen' && $permissiontoadd) {	// Test on permissions not required here
+		$result = $object->reOpen();
+	}
 
 	// Confirm back to draft status
 	if ($action == 'modif' && $permissiontoadd) {
@@ -2188,9 +2188,10 @@ if ($action == 'create') {
 
 			// TODO add alternative status
 			// 0=draft, 1=validated, 2=billed, we miss a status "delivered" (only available on order)
-		if ($object->statut == Reception::STATUS_CLOSED && $user->hasRight('reception', 'creer') && $user->admin) {
-    print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("ReOpen").'</a>';
-}
+			if ($object->statut == Reception::STATUS_CLOSED && $user->hasRight('reception', 'creer')) {
+				print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=reopen&token='.newToken().'">'.$langs->trans("ReOpen").'</a>';
+			}
+
 			// Send
 			if (empty($user->socid)) {
 				if ($object->statut > 0) {

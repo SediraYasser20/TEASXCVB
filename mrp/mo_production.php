@@ -2481,14 +2481,14 @@ jQuery(document).ready(function() {
         var statusElement = jQuery(".ficheobjectbg .badge.status4"); // Mo::STATUS_INPROGRESS (2) results in class .status4
 
         if (statusElement.length > 0) {
-            statusElement.text('Started'); // Set text directly to "Started"
-            // Keeping .status4 class for now, assuming "Started" and "Shipped" might share visual cues or this is sufficient.
+            statusElement.text('In Progress'); // Set text directly to "In Progress"
+            // Keeping .status4 class for now, assuming "In Progress" and "Shipped" might share visual cues or this is sufficient.
         } else {
             // Attempt to find status within the banner title if the badge selector fails.
             // This is a fallback and might need more specific targeting if the theme varies.
             var titleStatusElement = jQuery('div.fiche div.statusobject').find('span.status4');
             if (titleStatusElement.length > 0) {
-                 titleStatusElement.text('Started'); // Set text directly to "Started"
+                 titleStatusElement.text('In Progress');
             } else {
                 console.warn("Status element '.ficheobjectbg .badge.status4' or title status span not found. Cannot change status text.");
             }
@@ -2502,4 +2502,5 @@ jQuery(document).ready(function() {
 
 llxFooter();
 $db->close();
+
 

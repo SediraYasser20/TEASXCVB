@@ -659,20 +659,22 @@ if ($id > 0 || $ref) {
 			}
 
 			// Cost price. Can be used for margin module for option "calculate margin on explicit cost price
-			print '<tr><td>';
-			$textdesc = $langs->trans("CostPriceDescription");
-			$textdesc .= "<br>".$langs->trans("CostPriceUsage");
-			$text = $form->textwithpicto($langs->trans("CostPrice"), $textdesc, 1, 'help', '');
-			if (!$usercancreadprice) {
-				print $form->editfieldkey($text, 'cost_price', '', $object, 0, 'amount:6');
-				print '</td><td>';
-				print $form->editfieldval($text, 'cost_price', '', $object, 0, 'amount:6');
-			} else {
-    print $form->editfieldkey($text, 'cost_price', $object->cost_price, $object, ($usercancreate && $user->admin), 'amount:6'); // MODIFIED
-				print '</td><td>';
-    print $form->editfieldval($text, 'cost_price', $object->cost_price, $object, ($usercancreate && $user->admin), 'amount:6'); // MODIFIED
+			if ($user->admin) {
+				print '<tr><td>';
+				$textdesc = $langs->trans("CostPriceDescription");
+				$textdesc .= "<br>".$langs->trans("CostPriceUsage");
+				$text = $form->textwithpicto($langs->trans("CostPrice"), $textdesc, 1, 'help', '');
+				if (!$usercancreadprice) {
+					print $form->editfieldkey($text, 'cost_price', '', $object, 0, 'amount:6');
+					print '</td><td>';
+					print $form->editfieldval($text, 'cost_price', '', $object, 0, 'amount:6');
+				} else {
+	    print $form->editfieldkey($text, 'cost_price', $object->cost_price, $object, ($usercancreate && $user->admin), 'amount:6'); // MODIFIED
+					print '</td><td>';
+	    print $form->editfieldval($text, 'cost_price', $object->cost_price, $object, ($usercancreate && $user->admin), 'amount:6'); // MODIFIED
+				}
+				print '</td></tr>';
 			}
-			print '</td></tr>';
 
 
 
@@ -972,8 +974,6 @@ if ($user->hasRight('stock', 'mouvement', 'creer') && $user->admin) { // Only sh
     } else {
         print '<a class="butActionRefused classfortooltip" href="#" title="'.$langs->trans("ActionAvailableOnVariantProductOnly").'">'.$langs->trans("CorrectStock").'</a>';
     }
-} else {
-    print '<a class="butActionRefused classfortooltip" href="#" title="'.$langs->trans("NotEnoughPermissions").'">'.$langs->trans("CorrectStock").'</a>';
 }
 
 print '</div>';
@@ -1216,18 +1216,20 @@ if (!$variants || getDolGlobalString('VARIANT_ALLOW_STOCK_MOVEMENT_ON_VARIANT_PA
 							//print img_edit().'</a>';
 						}
 						print '</td>';
-						print '<td class="center tdoverflowmax125" title="'.dol_escape_htmltag($langs->trans("CorrectStock")).'">';
-						if ($entrepotstatic->status != $entrepotstatic::STATUS_CLOSED) {
-							print '<a href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&id_entrepot='.$entrepotstatic->id.'&action=correction&pdluoid='.$pdluo->id.'&token='.newToken().'">';
-							print img_picto($langs->trans("CorrectStock"), 'add', 'class="hideonsmartphone paddingright" style="color: #a69944"');
-							print $langs->trans("CorrectStock");
-							print '</a>';
-							// Disabled, because edition of stock content must use the "Correct stock menu".
-							// Do not use this, or data will be wrong (bad tracking of movement label, inventory code, ...
-							//print '<a href="'.$_SERVER["PHP_SELF"].'?id='.$id.'&action=editline&token='.newToken().'&lineid='.$pdluo->id.'#'.$pdluo->id.'">';
-							//print img_edit().'</a>';
+						if ($user->admin) {
+							print '<td class="center tdoverflowmax125" title="'.dol_escape_htmltag($langs->trans("CorrectStock")).'">';
+							if ($entrepotstatic->status != $entrepotstatic::STATUS_CLOSED) {
+								print '<a href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&id_entrepot='.$entrepotstatic->id.'&action=correction&pdluoid='.$pdluo->id.'&token='.newToken().'">';
+								print img_picto($langs->trans("CorrectStock"), 'add', 'class="hideonsmartphone paddingright" style="color: #a69944"');
+								print $langs->trans("CorrectStock");
+								print '</a>';
+								// Disabled, because edition of stock content must use the "Correct stock menu".
+								// Do not use this, or data will be wrong (bad tracking of movement label, inventory code, ...
+								//print '<a href="'.$_SERVER["PHP_SELF"].'?id='.$id.'&action=editline&token='.newToken().'&lineid='.$pdluo->id.'#'.$pdluo->id.'">';
+								//print img_edit().'</a>';
+							}
+							print '</td>';
 						}
-						print '</td>';
 						print '</tr>';
 					}
 				}
@@ -1423,3 +1425,4 @@ if (!$variants || getDolGlobalString('VARIANT_ALLOW_STOCK_MOVEMENT_ON_VARIANT_PA
 // End of page
 llxFooter();
 $db->close();
+

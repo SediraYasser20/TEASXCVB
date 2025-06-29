@@ -61,20 +61,8 @@ function commande_prepare_head(Commande $object)
 		$h++;
 	}
 
-	// Define a placeholder for the SAV demand_reason_id if not already defined.
-	// This ID should be configured in the Dolibarr dictionary "Input Reasons" (Setup -> Dictionaries -> Input Reasons)
-	// and this placeholder should be updated with the actual rowid of the 'SAV' entry.
-	if (!defined('ID_FOR_SAV_PLACEHOLDER')) {
-		define('ID_FOR_SAV_PLACEHOLDER', -1); // Placeholder: Replace -1 with the actual ID for 'SAV'
-	}
-
-	if (
-		(
-			(getDolGlobalInt('MAIN_SUBMODULE_EXPEDITION') && $user->hasRight('expedition', 'lire'))
-			|| (getDolGlobalInt('MAIN_SUBMODULE_DELIVERY') && $user->hasRight('expedition', 'delivery', 'lire'))
-		)
-		&& (isset($object->demand_reason_id) && $object->demand_reason_id != ID_FOR_SAV_PLACEHOLDER) /* Do not show if order is SAV */
-	) {
+	if ((getDolGlobalInt('MAIN_SUBMODULE_EXPEDITION') && $user->hasRight('expedition', 'lire'))
+		|| (getDolGlobalInt('MAIN_SUBMODULE_DELIVERY') && $user->hasRight('expedition', 'delivery', 'lire'))) {
 		$nbShipments = $object->getNbOfShipments();
 		$nbReceiption = 0;
 		$head[$h][0] = DOL_URL_ROOT.'/expedition/shipment.php?id='.$object->id;

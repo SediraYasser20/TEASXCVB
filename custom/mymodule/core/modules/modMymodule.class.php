@@ -1,232 +1,277 @@
 <?php
-/*
- * This file is an adaptation of pdf_bon_garantie.modules.php to work with the Expedition module.
+/* Copyright (C) 2004-2018 Laurent Destailleur <eldy@users.sourceforge.net>
+ * Copyright (C) 2018-2019 Nicolas ZABOURI <info@inovea-conseil.com>
+ * Copyright (C) 2019-2024 FrÃ©dÃ©ric France <frederic.france@free.fr>
+ * Copyright (C) 2025 SuperAdmin
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-
-require_once DOL_DOCUMENT_ROOT.'/core/modules/expedition/modules_expedition.php';
-require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
-require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
-require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
 
 /**
- * Class to generate a Warranty Slip PDF from an Expedition.
+ * \defgroup mymodule Module Mymodule
+ * \brief Mymodule module descriptor.
+ *
+ * \file htdocs/mymodule/core/modules/modMymodule.class.php
+ * \ingroup mymodule
+ * \brief Description and activation file for module Mymodule
  */
-class pdf_custom_shipping_slip extends ModelePDFExpedition
-{
-    public $db;
-    public $name;
-    public $description;
-    public $type;
-    public $cols = array();
+include_once DOL_DOCUMENT_ROOT.'/core/modules/DolibarrModules.class.php';
 
+/**
+ * Description and activation class for module Mymodule
+ */
+class modMymodule extends DolibarrModules
+{
     /**
-     * Constructor
+     * Constructor. Define names, constants, directories, boxes, permissions
      *
      * @param DoliDB $db Database handler
      */
-    public function __construct(DoliDB $db)
+    public function __construct($db)
     {
-        global $langs;
-        $langs->loadLangs(array("main", "bills", "products", "sendings"));
+        global $conf, $langs;
 
-        parent::__construct($db);
+        $this->db = $db;
 
-        $this->name = "custom_shipping_slip";
-        $this->description = $langs->trans('WarrantySlipFromExpedition');
-        $this->type = 'pdf';
+        // Id for module (must be unique).
+        $this->numero = 500000; // TODO: Reserve an ID at https://wiki.dolibarr.org/index.php/List_of_modules_id
+
+        // Key text used to identify module (for permissions, menus, etc...)
+        $this->rights_class = 'mymodule';
+
+        // Family can be 'base' (core modules), 'crm', 'financial', 'hr', 'projects', 'products', 'ecm', 'technic', 'interface', 'other', etc.
+        $this->family = "other";
+
+        // Module position in the family on 2 digits ('01', '10', '20', ...)
+        $this->module_position = '900';
+
+        // Module label (no space allowed), used if translation string 'ModuleMymoduleName' not found
+        $this->name = preg_replace('/^mod/i', '', get_class($this));
+
+        // Module description, used if translation string 'ModuleMymoduleDesc' not found
+        $this->description = "MymoduleDescription";
+        $this->descriptionlong = "MymoduleDescription";
+
+        // Author
+        $this->editor_name = 'Informatics-dz';
+        $this->editor_url = '';
+        $this->editor_squarred_logo = '';
+
+        // Version: 'development', 'experimental', 'dolibarr', or version string like 'x.y.z'
+        $this->version = '1.0';
+
+        // Key used in llx_const table to save module status
+        $this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
+
+        // Picto: Use 'fa-xxx' for Font Awesome or 'pictovalue@module' for module-specific image
+        $this->picto = 'fa-file';
+
+        // Define module features
+        $this->module_parts = array(
+            'triggers' => 0,
+            'login' => 0,
+            'substitutions' => 0,
+            'menus' => 0,
+            'tpl' => 0,
+            'barcode' => 0,
+            'models' => 1, // Enable custom models
+            'printing' => 0,
+            'theme' => 0,
+            'css' => array(),
+            'js' => array(),
+            'hooks' => array(),
+            'moduleforexternal' => 0,
+            'websitetemplates' => 0,
+            'captcha' => 0
+        );
+
+        // Data directories to create
+        $this->dirs = array("/mymodule/temp");
+
+        // Config pages
+        $this->config_page_url = array("setup.php@mymodule");
+
+        // Dependencies
+        $this->hidden = getDolGlobalInt('MODULE_MYMODULE_DISABLED');
+        $this->depends = array();
+        $this->requiredby = array();
+        $this->conflictwith = array();
+
+        // Language files
+        $this->langfiles = array("mymodule@mymodule");
+
+        // Prerequisites
+        $this->phpmin = array(7, 1);
+        $this->need_dolibarr_version = array(19, -3);
+        $this->need_javascript_ajax = 0;
+
+        // Messages at activation
+        $this->warnings_activation = array();
+        $this->warnings_activation_ext = array();
+
+        // Constants
+        $this->const = array();
+
+        if (!isModEnabled("mymodule")) {
+            $conf->mymodule = new stdClass();
+            $conf->mymodule->enabled = 0;
+        }
+
+        // Tabs
+        $this->tabs = array();
+
+        // Dictionaries
+        $this->dictionaries = array();
+
+        // Boxes/Widgets
+        $this->boxes = array();
+
+        // Cronjobs
+        $this->cronjobs = array();
+
+        // Permissions
+        $this->rights = array();
+        $r = 0;
+
+        // Main menu entries
+        $this->menu = array();
+        $r = 0;
+        $this->menu[$r++] = array(
+            'fk_menu' => '',
+            'type' => 'top',
+            'titre' => 'ModuleMymoduleName',
+            'prefix' => img_picto('', $this->picto, 'class="pictofixedwidth valignmiddle"'),
+            'mainmenu' => 'mymodule',
+            'leftmenu' => '',
+            'url' => '/mymodule/mymoduleindex.php',
+            'langs' => 'mymodule@mymodule',
+            'position' => 1000 + $r,
+            'enabled' => '0',
+            'perms' => '1',
+            'target' => '',
+            'user' => 2,
+        );
     }
 
     /**
-     * Main function to build the PDF.
+     * Function called when module is enabled.
+     * Adds constants, boxes, permissions, menus, and document templates to Dolibarr database.
+     *
+     * @param string $options Options when enabling module ('', 'noboxes')
+     * @return int 1 if OK, <=0 if KO
      */
-    public function write_file($object, $outputlangs, $srctemplatepath = '', $hidedetails = 0, $hidedesc = 0, $hideref = 0)
+    public function init($options = '')
     {
-        global $conf, $langs, $mysoc;
+        global $conf, $langs;
 
-        // Prevent null emitter
-        $this->emetteur = $mysoc;
-
-        if (!is_object($outputlangs)) {
-            $outputlangs = $langs;
+        // Load module SQL tables
+        $result = $this->_load_tables('/mymodule/sql/');
+        if ($result < 0) {
+            return -1;
         }
 
-        $object->fetch_thirdparty();
+        // Remove permissions and default entries
+        $this->remove($options);
 
-        $objectref = dol_sanitizeFileName($object->ref);
-        $dir = $conf->expedition->dir_output . "/" . $objectref;
-        if (!file_exists($dir)) {
-            dol_mkdir($dir);
-        }
-        $file = $dir . "/" . $objectref . "_garantie.pdf";
+        $sql = array();
 
-        $pdf = pdf_getInstance($this->format);
-        $pdf->SetAutoPageBreak(true, $this->marge_basse);
-        if (class_exists('TCPDF')) {
-            $pdf->setPrintHeader(false);
-            $pdf->setPrintFooter(false);
-        }
-        $pdf->SetFont(pdf_getPDFFont($outputlangs));
-        $pdf->SetMargins($this->marge_gauche, $this->marge_haute, $this->marge_droite);
-        $pdf->AddPage();
-
-        // Header
-        $this->_pagehead($pdf, $object, 1, $outputlangs);
-
-        // Columns
-        $this->defineColumnField($object, $outputlangs);
-
-        $tab_top = $pdf->GetY() + 10;
-        $tab_height = $this->page_hauteur - $tab_top - $this->marge_basse - 45;
-
-        // Titles
-        $this->pdfTabTitles($pdf, $tab_top, $tab_height, $outputlangs);
-        $nexY = $tab_top + $this->tabTitleHeight;
-
-        // Content
-        foreach ($object->lines as $line) {
-            $curY = $nexY;
-            if ($curY > ($this->page_hauteur - $this->marge_basse - 45)) {
-                $pdf->AddPage();
-                $this->_pagehead($pdf, $object, 0, $outputlangs);
-                $this->pdfTabTitles($pdf, $this->marge_haute, $tab_height, $outputlangs);
-                $curY = $this->marge_haute + $this->tabTitleHeight;
-            }
-
-            $pdf->SetFont('', '', pdf_getPDFFontSize($outputlangs) - 1);
-            $pdf->SetTextColor(0, 0, 0);
-
-            // Description
-            if ($this->getColumnStatus('desc')) {
-                $desc = !empty($line->product_label) ? $line->product_label : $line->desc;
-                $this->printStdColumnContent($pdf, $curY, 'desc', $desc);
-                $nexY = max($curY, $pdf->GetY());
-            }
-            // Qty
-            if ($this->getColumnStatus('qty')) {
-                $this->printStdColumnContent($pdf, $curY, 'qty', $line->qty);
-            }
-            // Serial
-            if ($this->getColumnStatus('serialnumber')) {
-                $sn = $this->getLineSerialNumber($object, array_search($line, $object->lines));
-                $this->printStdColumnContent($pdf, $curY, 'serialnumber', $sn);
-            }
-            // Warranty
-            if ($this->getColumnStatus('garantie')) {
-                $w = $this->getLineGarantie($object, array_search($line, $object->lines));
-                $this->printStdColumnContent($pdf, $curY, 'garantie', $w);
-            }
-
-            $nexY = $curY + 4;
-        }
-
-        $this->_tableau($pdf, $tab_top, $this->page_hauteur - $tab_top - $this->marge_basse - 45, 0, $outputlangs);
-        $this->_pagefoot($pdf, $object, $outputlangs);
-
-        $pdf->Output($file, 'F');
-        if (!empty($this->update_main_doc_field)) {
-            $this->record_generated_document($object, $outputlangs, $file);
-        }
-
-        return 1;
-    }
-
-    protected function _pagehead(&$pdf, $object, $showaddress, $outputlangs)
-    {
-        global $conf, $mysoc;
-        pdf_pagehead($pdf, $outputlangs, $this->page_hauteur);
-        if (!empty($this->emetteur->logo)) {
-            $lp = DOL_DOCUMENT_ROOT . '/' . $this->emetteur->logo;
-            if (file_exists($lp)) $pdf->Image($lp, $this->marge_gauche, $this->marge_haute, 70);
-        }
-        $df = pdf_getPDFFontSize($outputlangs);
-        $wpage = $this->page_largeur - $this->marge_gauche - $this->marge_droite;
-        $posy = $this->marge_haute + 30;
-        $pdf->SetFont('', 'B', $df);
-        $pdf->SetXY($this->marge_gauche, $posy);
-        $pdf->MultiCell($wpage/2, 4, $outputlangs->convToOutputCharset($this->emetteur->name), 0, 'L');
-        $pdf->SetFont('', '', $df-1);
-        $pdf->SetXY($this->marge_gauche, $posy+5);
-        $pdf->MultiCell($wpage/2, 4, 'www.informatics-dz.com', 0, 'L');
-        // Title band
-        $posy += 15;
-        $pdf->SetFillColor(230,230,230);
-        $pdf->Rect($this->marge_gauche, $posy, $wpage, 10, 'F');
-        $pdf->SetFont('aealarabiya','', $df+2);
-        $pdf->SetXY($this->marge_gauche, $posy+2);
-        $pdf->MultiCell($wpage,5,$outputlangs->convToOutputCharset('CERTIFICAT DE GARANTIE                     الضمان شهادة'),0,'C');
-        // Info box
-        $infoW=80;
-        $infoX=$this->page_largeur-$this->marge_droite-$infoW;
-        $pdf->SetTextColor(0,0,60);
-        $pdf->SetFont('', 'B', $df+3);
-        $pdf->SetXY($infoX, $this->marge_haute);
-        $pdf->MultiCell($infoW,3,$outputlangs->transnoentities("WarrantySlip").' / '. $object->ref,'','R');
-        $pdf->SetFont('', '', $df-1);
-        $pdf->SetXY($infoX, $this->marge_haute+5);
-        $pdf->MultiCell($infoW,3,$outputlangs->transnoentities("Date")." : ".dol_print_date($object->date_delivery,"day",false,$outputlangs,true),'','R');
-        if ($showaddress) {
-            $client=pdf_build_address($outputlangs,$this->emetteur,$object->thirdparty);
-            $bx=100;
-            $pdf->SetFont('','',$df-2);
-            $pdf->SetXY($infoX, $posy);
-            $pdf->MultiCell($bx,5,$outputlangs->transnoentities("BillTo"),0,'L');
-            $pdf->SetFont('','',$df-1);
-            $pdf->SetXY($infoX, $posy+5);
-            $pdf->MultiCell($bx,4,$client,0,'L');
-        }
-        $pdf->SetY($posy+40);
-    }
-
-    protected function _pagefoot(&$pdf, $object, $outputlangs)
-    {
-        $df = pdf_getPDFFontSize($outputlangs);
-        $w = $this->page_largeur - $this->marge_gauche - $this->marge_droite;
-        if ($pdf->getPage()==$pdf->getNumPages()) {
-            $y=$this->page_hauteur-$this->marge_basse-40;
-            $cond = "شروط الضمان:\n".
-                    "1- تضمن الشركة للزبون...";
-            $pdf->SetFont('aealarabiya','',$df-1);
-            $pdf->SetXY($this->marge_gauche,$y);
-            $pdf->MultiCell($w,3,$outputlangs->convToOutputCharset($cond),0,'R');
-        }
-        pdf_pagefoot($pdf,$outputlangs,'',$this->emetteur,$this->marge_basse,$this->marge_gauche,$this->page_hauteur,$object);
-    }
-
-    public function defineColumnField($object, $outputlangs, $hidedetails=0, $hidedesc=0, $hideref=0)
-    {
-        $this->cols = array(
-            'desc' => array('rank'=>10,'width'=>80,'status'=>true,'title'=>array('textkey'=>'Description'),'content'=>array('align'=>'L')),
-            'qty'  => array('rank'=>20,'width'=>20,'status'=>true,'title'=>array('textkey'=>'Qty'),'content'=>array('align'=>'C')),
-            'serialnumber'=>array('rank'=>30,'width'=>45,'status'=>true,'title'=>array('textkey'=>'LotSerial'),'content'=>array('align'=>'L')),
-            'garantie'=>array('rank'=>40,'width'=>30,'status'=>true,'title'=>array('textkey'=>'Warranty'),'content'=>array('align'=>'L'))
+        // Document templates
+        $moduledir = dol_sanitizeFileName('mymodule');
+        $myTmpObjects = array(
+            'Commande' => array('includerefgeneration' => 0, 'includedocgeneration' => 1), // Sales order templates
+            'Facture' => array('includerefgeneration' => 0, 'includedocgeneration' => 1),  // Invoice templates
+            'Mo' => array('includerefgeneration' => 0, 'includedocgeneration' => 1), // MO templates
+            'Expedition' => array('includerefgeneration' => 0, 'includedocgeneration' => 1) // Shipment templates
         );
-        // Removed call to buildColumnField() as it does not exist
-        // If you need custom column sorting, implement buildColumnField() here
-    }
 
-    protected function getLineSerialNumber($object,$i)
-    {
-        $sn=[];
-        if (empty($object->lines[$i]->id)) return '';
-        $sql="SELECT batch FROM ".MAIN_DB_PREFIX."expeditiondet_batch WHERE fk_expeditiondet=".(int)$object->lines[$i]->id;
-        $res=$this->db->query($sql);
-        if ($res) while ($o=$this->db->fetch_object($res)) $sn[]=$o->batch;
-        return join(', ',$sn);
-    }
+        foreach ($myTmpObjects as $myTmpObjectKey => $myTmpObjectArray) {
+            if ($myTmpObjectArray['includedocgeneration']) {
+                $type = strtolower($myTmpObjectKey); // 'commande', 'facture', 'mo', or 'expedition'
 
-    protected function getLineGarantie($object,$i)
-    {
-        $map=['1'=>'0 MOIS','2'=>'1 MOIS','3'=>'3 MOIS','4'=>'6 MOIS','5'=>'12 MOIS'];
-        if (!empty($object->lines[$i]->fk_product)) {
-            $sql="SELECT garantie FROM ".MAIN_DB_PREFIX."product_extrafields WHERE fk_object=".(int)$object->lines[$i]->fk_product;
-            $res=$this->db->query($sql);
-            if ($res && ($g=$this->db->fetch_object($res)) && !empty($g->garantie)) return $map[$g->garantie]??'';
+                // ODT template handling (if any for shipments, adjust $template_dir_odt)
+                // For PDF models, ODT handling is not strictly necessary unless you also provide ODT templates.
+                // We are adding a PHP PDF model, so this part might be skipped or adapted if you have ODTs.
+                if ($type != 'expedition') { // Assuming no ODT for expedition for now
+                    $template_dir_odt = '';
+                    if ($type == 'facture') $template_dir_odt = 'invoices';
+                    elseif ($type == 'commande') $template_dir_odt = 'orders';
+                    elseif ($type == 'mo') $template_dir_odt = 'mrp';
+
+                    if (!empty($template_dir_odt)) {
+                        $src = DOL_DOCUMENT_ROOT.'/install/doctemplates/'.$moduledir.'/template_'.$template_dir_odt.'.odt';
+                        $dirodt = DOL_DATA_ROOT.($conf->entity > 1 ? '/'.$conf->entity : '').'/doctemplates/'.$moduledir;
+                        $dest = $dirodt.'/template_'.$template_dir_odt.'.odt';
+
+                        if (file_exists($src) && !file_exists($dest)) {
+                            require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
+                            dol_mkdir($dirodt);
+                            $result = dol_copy($src, $dest, '0', 0);
+                            if ($result < 0) {
+                                $langs->load("errors");
+                                $this->error = $langs->trans('ErrorFailToCopyFile', $src, $dest);
+                                return 0;
+                            }
+                        }
+                    }
+                }
+
+                // Register document models
+                $models = array();
+                if ($type == 'facture') {
+                    $models = array('bon_garantie' => 'invoice'); // Invoice template
+                } elseif ($type == 'commande') {
+                    $models = array('bon_livraison' => 'order'); // Sales order template
+                } elseif ($type == 'mo') {
+                    $models = array('pdf_mo_serial_label' => 'mo'); // MO template
+                } elseif ($type == 'expedition') {
+                    // Our new PDF model for shipments
+                    // The key 'expedition_document' is the 'nom' field in llx_document_model
+                    // The value 'shipping' is the 'type' field for standard Dolibarr shipments
+                    $models = array('expedition_document' => 'shipping');
+                }
+
+                foreach ($models as $model_name => $model_type) {
+                    $sql = array_merge($sql, array(
+                        "DELETE FROM ".MAIN_DB_PREFIX."document_model WHERE nom = '".$this->db->escape($model_name)."' AND type = '".$this->db->escape($model_type)."' AND entity = ".((int) $conf->entity),
+                        "INSERT INTO ".MAIN_DB_PREFIX."document_model (nom, type, entity) VALUES('".$this->db->escape($model_name)."', '".$this->db->escape($model_type)."', ".((int) $conf->entity).")"
+                    ));
+                }
+            }
         }
-        return '';
+
+        return $this->_init($sql, $options);
+    }
+
+    /**
+     * Function called when module is disabled.
+     * Removes constants, boxes, permissions, and document models from Dolibarr database.
+     *
+     * @param string $options Options when disabling module ('', 'noboxes')
+     * @return int 1 if OK, <=0 if KO
+     */
+    public function remove($options = '')
+    {
+        $sql = array(
+            // Remove sales order template
+            "DELETE FROM ".MAIN_DB_PREFIX."document_model WHERE nom = 'bon_livraison' AND type = 'order' AND entity = ".((int) $conf->entity),
+            // Remove invoice template
+            "DELETE FROM ".MAIN_DB_PREFIX."document_model WHERE nom = 'bon_garantie' AND type = 'invoice' AND entity = ".((int) $conf->entity),
+            // Remove MO serial label template
+            "DELETE FROM ".MAIN_DB_PREFIX."document_model WHERE nom = 'pdf_mo_serial_label' AND type = 'mo' AND entity = ".((int) $conf->entity),
+            // Remove our new shipment template
+            "DELETE FROM ".MAIN_DB_PREFIX."document_model WHERE nom = 'expedition_document' AND type = 'shipping' AND entity = ".((int) $conf->entity)
+        );
+        return $this->_remove($sql, $options);
     }
 }

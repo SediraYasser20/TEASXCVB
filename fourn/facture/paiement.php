@@ -37,6 +37,18 @@
 
 // Load Dolibarr environment
 require '../../main.inc.php';
+
+// Check if user is in group 9 directly
+$user_is_in_group_9 = false;
+$sql_group_check_payment = "SELECT COUNT(*) as count FROM ".MAIN_DB_PREFIX."usergroup_user WHERE fk_user = ".$user->id." AND fk_usergroup = 9";
+$resql_group_check_payment = $db->query($sql_group_check_payment);
+if ($resql_group_check_payment) {
+	$obj_group_check_payment = $db->fetch_object($resql_group_check_payment);
+	if ($obj_group_check_payment && $obj_group_check_payment->count > 0) {
+		$user_is_in_group_9 = true;
+	}
+	$db->free($resql_group_check_payment);
+}
 require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.class.php';
 require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
 require_once DOL_DOCUMENT_ROOT.'/fourn/class/paiementfourn.class.php';
@@ -118,7 +130,7 @@ $search_array_options = $extrafields->getOptionalsFromPost($object->table_elemen
 
 $arrayfields = array();
 
-$permissiontoadd = ($user->hasRight("fournisseur", "facture", "creer") || $user->hasRight("supplier_invoice", "creer"));
+$permissiontoadd = ($user->hasRight("fournisseur", "facture", "creer") || $user->hasRight("supplier_invoice", "creer") || $user_is_in_group_9);
 
 
 /*
@@ -399,16 +411,16 @@ if ($action == 'create' || $action == 'confirm_paiement' || $action == 'add_paie
 
 	$sql = 'SELECT s.nom as name, s.rowid as socid,';
 	$sql .= ' f.rowid, f.ref, f.ref_supplier, f.total_ttc as total, f.fk_mode_reglement, f.fk_account';
-	if (!$user->hasRight("societe", "client", "voir") && !$socid) {
+	if ((!$user->hasRight("societe", "client", "voir") && !$user_is_in_group_9) && !$socid) {
 		$sql .= ", sc.fk_soc, sc.fk_user ";
 	}
 	$sql .= ' FROM '.MAIN_DB_PREFIX.'societe as s, '.MAIN_DB_PREFIX.'facture_fourn as f';
-	if (!$user->hasRight("societe", "client", "voir") && !$socid) {
+	if ((!$user->hasRight("societe", "client", "voir") && !$user_is_in_group_9) && !$socid) {
 		$sql .= ", ".MAIN_DB_PREFIX."societe_commerciaux as sc";
 	}
 	$sql .= ' WHERE f.fk_soc = s.rowid';
 	$sql .= ' AND f.rowid = '.((int) $facid);
-	if (!$user->hasRight("societe", "client", "voir") && !$socid) {
+	if ((!$user->hasRight("societe", "client", "voir") && !$user_is_in_group_9) && !$socid) {
 		$sql .= " AND s.rowid = sc.fk_soc AND sc.fk_user = ".((int) $user->id);
 	}
 	$resql = $db->query($sql);
@@ -864,3 +876,4 @@ if ($action == 'create' || $action == 'confirm_paiement' || $action == 'add_paie
 // End of page
 llxFooter();
 $db->close();
+

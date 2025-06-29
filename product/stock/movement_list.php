@@ -1000,6 +1000,7 @@ if ($action == "transfert") {
 // Action bar
 if ((empty($action) || $action == 'list') && $id > 0) {
 	print "<div class=\"tabsAction\">\n";
+
 	$parameters = array();
 	$reshook = $hookmanager->executeHooks('addMoreActionsButtons', $parameters, $warehouse, $action); // Note that $action and $warehouse may have been
 	// modified by hook
@@ -1007,11 +1008,12 @@ if ((empty($action) || $action == 'list') && $id > 0) {
 		if ($user->hasRight('stock', 'mouvement', 'creer')) {
 			print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$id.'&action=transfert&token='.newToken().'">'.$langs->trans("TransferStock").'</a>';
 		}
-		// Modified condition: Check if user is admin in addition to having stock movement rights
-		if ($user->hasRight('stock', 'mouvement', 'creer') && $user->admin) {
+
+		if ($user->hasRight('stock', 'mouvement', 'creer')) {
 			print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?id='.$id.'&action=correction&token='.newToken().'">'.$langs->trans("CorrectStock").'</a>';
 		}
 	}
+
 	print '</div><br>';
 }
 

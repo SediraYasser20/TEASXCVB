@@ -1454,7 +1454,6 @@ print "</div>";
 print '</form>';
 
 $db->free($resql);
-$show_files ??= false; // Add this line to prevent the warning
 
 $hidegeneratedfilelistifempty = 1;
 if ($massaction == 'builddoc' || $action == 'remove_file' || $show_files) {

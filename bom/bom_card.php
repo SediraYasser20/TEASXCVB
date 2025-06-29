@@ -1,6 +1,6 @@
 <?php
 /* Copyright (C) 2017-2023  Laurent Destailleur     <eldy@users.sourceforge.net>
- * Copyright (C) 2019-2024  Frédéric France         <frederic.france@free.fr>
+ * Copyright (C) 2019-2024  FrÃ©dÃ©ric France         <frederic.france@free.fr>
  * Copyright (C) 2023       Charlene Benke          <charlene@patas-monkey.com>
  * Copyright (C) 2024		MDW							<mdeweerd@users.noreply.github.com>
  *
@@ -358,7 +358,7 @@ if ($action == 'create') {
 
 	if ($is_in_restricted_group) {
 		// Fetch product 31's label to display
-		$restricted_product_id = 31;
+		$restricted_product_id = 483;
 		$restricted_product_label = '';
 		require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
 		$tmp_prod = new Product($db);
@@ -789,7 +789,48 @@ if ($object->id > 0 && (empty($action) || ($action != 'edit' && $action != 'crea
 
 			// Back to draft
 			if ($object->status == $object::STATUS_VALIDATED) {
-				if ($permissiontoadd) {
+				$showBackToDraftButton = true; // Default to show
+
+				// Check for MO
+				$moExists = false;
+				$sql_mo = "SELECT rowid FROM ".MAIN_DB_PREFIX."mrp_mo WHERE fk_bom = ".$object->id." LIMIT 1";
+				$resql_mo = $db->query($sql_mo);
+				if ($resql_mo) {
+					if ($db->num_rows($resql_mo) > 0) {
+						$moExists = true;
+					}
+				} else {
+					dol_syslog("bom_card.php: Error checking for MO: ".$db->lasterror(), LOG_ERR);
+					// $moExists remains false, so button won't be hidden due to MO if DB error
+					// $showBackToDraftButton remains true
+				}
+
+				if ($moExists) {
+					// MO exists, now check if we need to hide the button
+					if (!$user->admin) {
+						// User is not admin, check group 3
+						$userIsInGroup3 = false;
+						$sql_group = "SELECT rowid FROM ".MAIN_DB_PREFIX."usergroup_user WHERE fk_user = ".$user->id." AND fk_usergroup = 3 LIMIT 1";
+						$resql_group = $db->query($sql_group);
+						if ($resql_group) {
+							if ($db->num_rows($resql_group) > 0) {
+								$userIsInGroup3 = true;
+							}
+						} else {
+							dol_syslog("bom_card.php: Error checking user group 3: ".$db->lasterror(), LOG_ERR);
+							// $userIsInGroup3 remains false.
+							// $showBackToDraftButton remains true because we don't set it to false on DB error.
+						}
+
+						if (!$userIsInGroup3) {
+							// MO exists, user is not admin, and user is not in group 3
+							$showBackToDraftButton = false;
+						}
+					}
+					// If user is admin, $showBackToDraftButton remains true without needing group check.
+				}
+
+				if ($permissiontoadd && $showBackToDraftButton) {
 					print '<a class="butAction" href="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'&action=setdraft&token='.newToken().'">'.$langs->trans("SetToDraft").'</a>'."\n";
 				}
 			}
@@ -828,7 +869,7 @@ if ($object->id > 0 && (empty($action) || ($action != 'edit' && $action != 'crea
 			}
 
 			// Clone
-			if ($permissiontoadd) {
+			if ($permissiontoadd && $user->admin) {
 				print dolGetButtonAction($langs->trans("ToClone"), '', 'default', $_SERVER['PHP_SELF'].'?id='.$object->id.(!empty($object->socid) ? '&socid='.$object->socid : "").'&action=clone&object=bom', 'clone', $permissiontoadd);
 			}
 
@@ -913,3 +954,5 @@ if ($object->id > 0 && (empty($action) || ($action != 'edit' && $action != 'crea
 // End of page
 llxFooter();
 $db->close();
+
+
