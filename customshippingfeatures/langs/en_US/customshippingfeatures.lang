@@ -1,0 +1,25 @@
+# Dolibarr language file - en_US - Module CustomShippingFeatures
+Module700000Name=Custom Shipping Features
+Module700000Description=Adds custom features related to shipping, including automatic email notifications.
+Permission700000=Manage Custom Shipping Features
+PermissionsCustomShippingFeaturesDesc=Manage Custom Shipping Features (example permission)
+
+ShipmentValidatedSubject=Shipment %s from %s has been validated
+ShipmentValidatedBody=Dear %s,\n\nYour shipment with reference %s has been validated.\nPlease find the shipping document attached.\n\nRegards,\n%s
+TriggerDescAutoShippingEmail=Automatically sends Espadon PDF via email upon shipment validation.
+ErrorFailedToGenerateEspadonPDF=Failed to generate Espadon PDF for shipment %s.
+ErrorNoRecipientEmail=No valid recipient email found for thirdparty %s on shipment %s.
+ErrorFailedToSendEmail=Failed to send email for shipment %s. Error: %s
+ErrorCreatingCMailFile=Failed to create mail object for shipment %s. Error: %s
+ErrorShipmentObjectNotExpedition=Trigger fired for SHIPPING_VALIDATE but object was not an Expedition object.
+ErrorThirdpartyNotLoaded=Thirdparty not loaded for shipment %s.
+ErrorEspadonPDFNotFound=Espadon PDF not found for shipment %s after generation attempt.
+ErrorSenderEmailNotConfigured=Sender email (MAIN_MAIL_EMAIL_FROM or current user) is not configured.
+InfoEmailSent=Successfully sent Espadon PDF for shipment %s to %s.
+InfoTriggerFired=AutoShippingEmail trigger fired for shipment %s.
+InfoPDFNotFoundAttemptingGeneration=PDF for shipment %s not found at %s. Attempting to generate.
+InfoUsingThirdpartyMainEmail=Using thirdparty main email %s for shipment %s.
+InfoFoundRecipientEmailFromContact=Found recipient email %s from contact type %s for shipment %s.
+ErrorModuleNumber=700000
+ErrorFamily=crm
+ErrorModulePosition=500
