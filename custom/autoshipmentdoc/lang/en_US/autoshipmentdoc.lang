@@ -1,0 +1,7 @@
+# Dolibarr language file - Module AutoShipmentDoc
+AutoShipmentDocDescription=Automatically generates and emails shipment document upon validation.
+ShipmentConfirmation=Shipment Confirmation
+PleaseFindYourShipmentConfirmationAttached=Please find your shipment confirmation attached.
+ErrorFailedToGeneratePdf=Error: Failed to generate PDF for shipment
+ErrorFailedToSendEmail=Error: Failed to send email for shipment
+ErrorClientEmailEmpty=Error: Client email is empty for shipment
